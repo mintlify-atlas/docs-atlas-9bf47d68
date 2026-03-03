@@ -1,0 +1,144 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "SolarSharp",
+  "projectDescription": "A modern, high-performance Lua 5.2 interpreter written entirely in C# for .NET, Unity3D, and Mono platforms",
+  "theme": "aspen",
+  "primaryColor": "#f59e0b",
+  "lightColor": "#fbbf24",
+  "darkColor": "#d97706",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core-concepts/script-execution",
+              "core-concepts/lua-values",
+              "core-concepts/tables",
+              "core-concepts/functions",
+              "core-concepts/coroutines"
+            ]
+          },
+          {
+            "group": "CLR Interop",
+            "pages": [
+              "interop/overview",
+              "interop/calling-csharp-from-lua",
+              "interop/calling-lua-from-csharp",
+              "interop/user-data",
+              "interop/converters"
+            ]
+          },
+          {
+            "group": "Standard Library",
+            "pages": [
+              "stdlib/overview",
+              "stdlib/basic",
+              "stdlib/string",
+              "stdlib/table",
+              "stdlib/math",
+              "stdlib/io",
+              "stdlib/os",
+              "stdlib/coroutine",
+              "stdlib/debug",
+              "stdlib/json"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/bytecode",
+              "advanced/performance",
+              "advanced/sandboxing",
+              "advanced/custom-modules",
+              "advanced/debugging"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/unity-integration",
+              "guides/migration-from-moonsharp",
+              "guides/error-handling",
+              "guides/repl"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api/script",
+              "api/lua-value",
+              "api/table",
+              "api/closure",
+              "api/coroutine"
+            ]
+          },
+          {
+            "group": "Interop",
+            "pages": [
+              "api/user-data",
+              "api/callback-function",
+              "api/script-function-delegate"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "api/script-options",
+              "api/script-global-options",
+              "api/core-modules"
+            ]
+          },
+          {
+            "group": "Data Types",
+            "pages": [
+              "api/data-type",
+              "api/callback-arguments"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "High compatibility with Lua 5.2 standard",
+    "Easy CLR interop with runtime code generation",
+    "Support for coroutines and async methods",
+    "Bytecode compilation and serialization",
+    "Complete Lua standard library implementation",
+    "JSON parser for Lua table conversion",
+    "REPL interpreter included",
+    "Cross-platform support (Unity3D, iOS, IL2CPP)"
+  ],
+  "publicApiSurface": [
+    "Script",
+    "LuaValue",
+    "Table",
+    "Closure",
+    "Coroutine",
+    "CallbackFunction",
+    "UserData",
+    "ScriptOptions",
+    "ScriptGlobalOptions",
+    "DataType",
+    "CallbackArguments",
+    "CoreModules",
+    "DynValue (legacy compatibility)",
+    "ScriptFunctionDelegate"
+  ]
+}
