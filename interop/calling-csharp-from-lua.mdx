@@ -1,0 +1,415 @@
+---
+title: Calling C# from Lua
+description: Expose C# methods, properties, and objects to Lua scripts
+---
+
+SolarSharp allows you to expose C# classes and their members to Lua scripts, enabling powerful interoperability between managed code and scripts.
+
+## Registering Types
+
+Before a C# type can be used in Lua, it must be registered with the UserData system.
+
+### Basic Registration
+
+```csharp
+public class Person
+{
+    public string Name { get; set; }
+    public int Age { get; set; }
+    
+    public void Greet()
+    {
+        Console.WriteLine($"Hello, I'm {Name}");
+    }
+}
+
+// Register the type
+UserData.RegisterType<Person>();
+```
+
+Now you can use this type in Lua:
+
+```lua
+-- Access from C# (assuming person object is passed to Lua)
+person.Name = "Alice"
+person.Age = 30
+person:Greet()  -- Prints: Hello, I'm Alice
+```
+
+### Attribute-Based Registration
+
+Use the `[SolarSharpUserData]` attribute to mark types for automatic registration:
+
+```csharp
+[SolarSharpUserData]
+public class GameCharacter
+{
+    public string Name { get; set; }
+    public int Health { get; set; }
+    
+    public void TakeDamage(int amount)
+    {
+        Health -= amount;
+    }
+}
+
+// Register all marked types in the assembly
+UserData.RegisterAssembly();
+```
+
+<Note>
+Call `RegisterAssembly()` without parameters to register types from the calling assembly, or pass an `Assembly` parameter to register from a specific assembly.
+</Note>
+
+## Controlling Member Visibility
+
+By default, all public members are exposed to Lua. You can control visibility with attributes:
+
+### Hiding Public Members
+
+<CodeGroup>
+```csharp SolarSharpHidden
+[SolarSharpUserData]
+public class BankAccount
+{
+    public decimal Balance { get; set; }
+    
+    [SolarSharpHidden]
+    public string InternalAccountId { get; set; }
+    
+    public void Deposit(decimal amount)
+    {
+        Balance += amount;
+    }
+}
+```
+
+```csharp SolarSharpVisible(false)
+public class SecureData
+{
+    public string PublicInfo { get; set; }
+    
+    [SolarSharpVisible(false)]
+    public string PrivateKey { get; set; }
+}
+```
+</CodeGroup>
+
+### Exposing Non-Public Members
+
+```csharp
+[SolarSharpUserData]
+public class Configuration
+{
+    [SolarSharpVisible(true)]
+    private string secretValue; // Now accessible from Lua
+    
+    [SolarSharpVisible(true)]
+    internal void InternalMethod()
+    {
+        // This internal method is now accessible from Lua
+    }
+}
+```
+
+## Passing Objects to Lua
+
+There are several ways to make C# objects available to Lua scripts:
+
+### Setting Globals
+
+```csharp
+var script = new Script();
+var person = new Person { Name = "Bob", Age = 25 };
+
+// Set as global variable
+script.Globals["player"] = person;
+
+// Use in Lua
+script.DoString(@"
+    print(player.Name)  -- Prints: Bob
+    player.Age = 26
+    player:Greet()
+");
+```
+
+### Passing as Arguments
+
+```csharp
+var script = new Script();
+script.DoString(@"
+    function processCharacter(char)
+        char.Health = char.Health - 10
+        return char.Health
+    end
+");
+
+var character = new GameCharacter { Name = "Hero", Health = 100 };
+var result = script.Call(script.Globals["processCharacter"], character);
+```
+
+### Returning from C# Functions
+
+```csharp
+script.Globals["createPerson"] = (Func<string, int, Person>)((name, age) =>
+{
+    return new Person { Name = name, Age = age };
+});
+
+script.DoString(@"
+    local newPerson = createPerson('Charlie', 35)
+    print(newPerson.Name)
+");
+```
+
+## Accessing Static Members
+
+Static members can be accessed through static userdata:
+
+```csharp
+public class MathUtils
+{
+    public static double PI = 3.14159;
+    
+    public static double Square(double x)
+    {
+        return x * x;
+    }
+}
+
+UserData.RegisterType<MathUtils>();
+
+var script = new Script();
+script.Globals["MathUtils"] = UserData.CreateStatic<MathUtils>();
+
+script.DoString(@"
+    print(MathUtils.PI)           -- 3.14159
+    print(MathUtils.Square(5))    -- 25
+");
+```
+
+## Working with Methods
+
+### Instance Methods
+
+```csharp
+public class Calculator
+{
+    private double result = 0;
+    
+    public double Add(double value)
+    {
+        result += value;
+        return result;
+    }
+    
+    public double GetResult()
+    {
+        return result;
+    }
+}
+```
+
+```lua
+local calc = Calculator()
+calc:Add(10)
+calc:Add(5)
+print(calc:GetResult())  -- 15
+```
+
+<Note>
+Use colon syntax (`:`) for instance methods in Lua, which automatically passes the object as the first parameter.
+</Note>
+
+### Overloaded Methods
+
+SolarSharp automatically resolves method overloads based on argument types:
+
+```csharp
+public class Printer
+{
+    public void Print(string message)
+    {
+        Console.WriteLine($"String: {message}");
+    }
+    
+    public void Print(int number)
+    {
+        Console.WriteLine($"Number: {number}");
+    }
+    
+    public void Print(string msg, int times)
+    {
+        for (int i = 0; i < times; i++)
+            Console.WriteLine(msg);
+    }
+}
+```
+
+```lua
+local printer = Printer()
+printer:Print("Hello")      -- Calls Print(string)
+printer:Print(42)           -- Calls Print(int)
+printer:Print("Hi", 3)      -- Calls Print(string, int)
+```
+
+## Working with Properties and Fields
+
+```csharp
+[SolarSharpUserData]
+public class Player
+{
+    public string Name { get; set; }
+    public int Score;
+    
+    public bool IsAlive { get; private set; } = true;
+}
+```
+
+```lua
+local player = Player()
+player.Name = "Player1"
+player.Score = 1000
+print(player.IsAlive)  -- true
+-- player.IsAlive = false  -- Error: property is read-only
+```
+
+## Custom Property Names
+
+Use `[SolarSharpProperty]` to expose a property with a different name in Lua:
+
+```csharp
+public class Item
+{
+    [SolarSharpProperty("id")]
+    public string ItemIdentifier { get; set; }
+    
+    [SolarSharpProperty("qty")]
+    public int Quantity { get; set; }
+}
+```
+
+```lua
+local item = Item()
+item.id = "SWORD_001"
+item.qty = 5
+```
+
+## Implementing Metamethods
+
+You can implement Lua metamethods in C# using the `[SolarSharpUserDataMetamethod]` attribute:
+
+```csharp
+[SolarSharpUserData]
+public class Vector2
+{
+    public double X { get; set; }
+    public double Y { get; set; }
+    
+    [SolarSharpUserDataMetamethod("__add")]
+    public static Vector2 Add(Vector2 a, Vector2 b)
+    {
+        return new Vector2 
+        { 
+            X = a.X + b.X, 
+            Y = a.Y + b.Y 
+        };
+    }
+    
+    [SolarSharpUserDataMetamethod("__tostring")]
+    public string ToString()
+    {
+        return $"({X}, {Y})";
+    }
+}
+```
+
+```lua
+local v1 = Vector2()
+v1.X = 1
+v1.Y = 2
+
+local v2 = Vector2()
+v2.X = 3
+v2.Y = 4
+
+local v3 = v1 + v2  -- Calls __add metamethod
+print(v3)           -- Calls __tostring: (4, 6)
+```
+
+## Extension Methods
+
+Register extension methods to add functionality to existing types:
+
+```csharp
+public static class StringExtensions
+{
+    public static string Reverse(this string str)
+    {
+        return new string(str.Reverse().ToArray());
+    }
+}
+
+// Register extension type
+UserData.RegisterExtensionType(typeof(StringExtensions));
+```
+
+```lua
+local text = "hello"
+print(text:Reverse())  -- "olleh"
+```
+
+## Custom Type Descriptors
+
+For advanced scenarios, implement `IUserDataType` for complete control:
+
+```csharp
+public class CustomObject : IUserDataType
+{
+    public LuaValue Index(Script script, LuaValue index, bool isDirectIndexing)
+    {
+        // Custom index logic
+        return LuaValue.Nil;
+    }
+    
+    public bool SetIndex(Script script, LuaValue index, LuaValue value, bool isDirectIndexing)
+    {
+        // Custom set index logic
+        return true;
+    }
+    
+    public LuaValue MetaIndex(Script script, string metaname)
+    {
+        // Custom metamethod logic
+        return null;
+    }
+}
+
+// No registration needed - IUserDataType types are self-describing
+```
+
+<Warning>
+When implementing `IUserDataType`, register the type with `InteropAccessMode.NoReflectionAllowed` to prevent automatic descriptor generation.
+</Warning>
+
+## Performance Considerations
+
+<Steps>
+  <Step title="Choose the Right Access Mode">
+    Use `Preoptimized` for frequently-accessed types, `LazyOptimized` for general use, and `Reflection` for rarely-used types.
+  </Step>
+  
+  <Step title="Minimize Type Conversions">
+    Frequent conversions between Lua and CLR types can impact performance. Design your API to minimize unnecessary conversions.
+  </Step>
+  
+  <Step title="Cache Type Descriptors">
+    If you need to manually create UserData, cache descriptors instead of calling `GetDescriptorForType` repeatedly.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<Card title="Calling Lua from C#" icon="arrow-right" href="/interop/calling-lua-from-csharp">
+  Learn how to call Lua functions from C# code
+</Card>

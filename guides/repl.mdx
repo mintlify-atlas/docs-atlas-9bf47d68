@@ -1,0 +1,690 @@
+---
+title: REPL Interpreter
+description: Learn how to use the SolarSharp REPL for interactive Lua development and debugging
+---
+
+SolarSharp includes a powerful Read-Eval-Print Loop (REPL) interpreter that enables interactive Lua development, rapid prototyping, and debugging.
+
+## What is the REPL?
+
+The REPL is an interactive shell that:
+
+- Reads user input (Lua code)
+- Evaluates the code
+- Prints the result
+- Loops back for more input
+
+It's perfect for:
+- Testing Lua code snippets
+- Experimenting with APIs
+- Debugging scripts interactively
+- Learning Lua syntax
+- Prototyping game logic
+
+## Using the CLI REPL
+
+### Starting the REPL
+
+Run the SolarSharp CLI without arguments:
+
+```bash
+# Start interactive REPL
+solarsharp
+
+# Run a specific script file
+solarsharp myscript.lua
+
+# Execute a command
+solarsharp -X "help"
+
+# Show help
+solarsharp -H
+```
+
+### REPL Interface
+
+When you start the REPL, you'll see:
+
+```
+SolarSharp 2.0.0.0 [Lua 5.2]
+Running on .NET ...
+
+Type Lua code to execute it or type !help to see help on commands.
+
+Welcome.
+
+>
+```
+
+### Basic Usage
+
+```lua
+> print("Hello, SolarSharp!")
+Hello, SolarSharp!
+
+> x = 5
+> y = 10
+> x + y
+15
+
+> function greet(name)
+>>   return "Hello, " .. name
+>> end
+> greet("World")
+Hello, World
+```
+
+### Return Value Shortcuts
+
+Use `=` prefix for expression evaluation (like standard Lua):
+
+```lua
+> = 2 + 2
+4
+
+> = math.sin(math.pi / 2)
+1.0
+
+> = { 1, 2, 3, 4, 5 }
+table: 0x...
+```
+
+## REPL Commands
+
+Commands start with `!`:
+
+```bash
+> !help
+# Shows available commands
+
+> !exit
+# Exits the REPL
+
+> !run myfile.lua
+# Runs a Lua file
+```
+
+## Implementing Custom REPL
+
+You can easily create your own REPL using `ReplInterpreter`:
+
+### Basic Custom REPL
+
+```csharp
+using System;
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+using SolarSharp.Interpreter.Errors;
+using SolarSharp.Interpreter.REPL;
+
+public class SimpleREPL
+{
+    public static void Main()
+    {
+        Script script = new Script();
+        ReplInterpreter repl = new ReplInterpreter(script)
+        {
+            HandleClassicExprsSyntax = true // Enable '=' prefix
+        };
+        
+        Console.WriteLine("Simple Lua REPL - Type 'exit' to quit\n");
+        
+        while (true)
+        {
+            // Show prompt
+            Console.Write(repl.ClassicPrompt + " ");
+            
+            // Read input
+            string input = Console.ReadLine();
+            
+            // Check for exit
+            if (input == "exit") break;
+            
+            try
+            {
+                // Evaluate
+                LuaValue result = repl.Evaluate(input);
+                
+                // Print result (if not null and not void)
+                if (result != null && result.Type != DataType.Void)
+                {
+                    Console.WriteLine(result);
+                }
+            }
+            catch (InterpreterException ex)
+            {
+                // Handle errors
+                Console.WriteLine($"Error: {ex.DecoratedMessage ?? ex.Message}");
+            }
+        }
+    }
+}
+```
+
+### Advanced REPL with Features
+
+```csharp
+using System;
+using System.Collections.Generic;
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+using SolarSharp.Interpreter.Errors;
+using SolarSharp.Interpreter.REPL;
+using SolarSharp.Interpreter.Modules;
+
+public class AdvancedREPL
+{
+    private Script script;
+    private ReplInterpreter repl;
+    private List<string> history;
+    
+    public AdvancedREPL()
+    {
+        // Initialize with all modules
+        script = new Script(CoreModules.Preset_Complete);
+        
+        // Set up debug output
+        script.Options.DebugPrint = s => Console.WriteLine(s);
+        
+        // Create REPL
+        repl = new ReplInterpreter(script)
+        {
+            HandleClassicExprsSyntax = true
+        };
+        
+        history = new List<string>();
+        
+        // Register custom functions
+        RegisterCustomFunctions();
+    }
+    
+    private void RegisterCustomFunctions()
+    {
+        // Add a function to make .NET types available
+        script.Globals["import"] = (Func<string, LuaValue>)ImportType;
+        
+        // Add history access
+        script.Globals["history"] = (Action)ShowHistory;
+    }
+    
+    private LuaValue ImportType(string typeName)
+    {
+        var type = Type.GetType(typeName);
+        if (type == null)
+        {
+            Console.WriteLine($"Type '{typeName}' not found.");
+            return LuaValue.Nil;
+        }
+        return UserData.CreateStatic(type);
+    }
+    
+    private void ShowHistory()
+    {
+        Console.WriteLine("\n=== Command History ===");
+        for (int i = 0; i < history.Count; i++)
+        {
+            Console.WriteLine($"{i + 1}: {history[i]}");
+        }
+        Console.WriteLine();
+    }
+    
+    public void Run()
+    {
+        PrintBanner();
+        
+        while (true)
+        {
+            try
+            {
+                // Show appropriate prompt
+                Console.Write(repl.ClassicPrompt + " ");
+                
+                string input = Console.ReadLine();
+                
+                // Handle commands
+                if (input != null && input.StartsWith("!"))
+                {
+                    if (HandleCommand(input[1..]))
+                        break; // Exit if command returns true
+                    continue;
+                }
+                
+                // Add to history
+                if (!string.IsNullOrWhiteSpace(input))
+                {
+                    history.Add(input);
+                }
+                
+                // Evaluate
+                LuaValue result = repl.Evaluate(input);
+                
+                // Print result
+                if (result != null && result.Type != DataType.Void)
+                {
+                    Console.WriteLine(FormatResult(result));
+                }
+            }
+            catch (SyntaxErrorException ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"Syntax Error: {ex.DecoratedMessage ?? ex.Message}");
+                Console.ResetColor();
+            }
+            catch (ScriptRuntimeException ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"Runtime Error: {ex.DecoratedMessage ?? ex.Message}");
+                Console.ResetColor();
+            }
+            catch (Exception ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"Error: {ex.Message}");
+                Console.ResetColor();
+            }
+        }
+    }
+    
+    private bool HandleCommand(string cmd)
+    {
+        string[] parts = cmd.Split(' ', 2);
+        string command = parts[0].ToLower();
+        string args = parts.Length > 1 ? parts[1] : "";
+        
+        switch (command)
+        {
+            case "exit":
+            case "quit":
+                return true;
+                
+            case "help":
+                ShowHelp();
+                break;
+                
+            case "clear":
+                Console.Clear();
+                PrintBanner();
+                break;
+                
+            case "history":
+                ShowHistory();
+                break;
+                
+            case "load":
+                LoadScript(args);
+                break;
+                
+            case "save":
+                SaveHistory(args);
+                break;
+                
+            default:
+                Console.WriteLine($"Unknown command: {command}");
+                Console.WriteLine("Type !help for available commands.");
+                break;
+        }
+        
+        return false;
+    }
+    
+    private void PrintBanner()
+    {
+        Console.WriteLine(Script.GetBanner("Console"));
+        Console.WriteLine();
+        Console.WriteLine("Enhanced Lua REPL");
+        Console.WriteLine("Type Lua code or !help for commands\n");
+    }
+    
+    private void ShowHelp()
+    {
+        Console.WriteLine("\n=== Available Commands ===");
+        Console.WriteLine("!help      - Show this help");
+        Console.WriteLine("!exit      - Exit the REPL");
+        Console.WriteLine("!clear     - Clear screen");
+        Console.WriteLine("!history   - Show command history");
+        Console.WriteLine("!load FILE - Load and execute a Lua file");
+        Console.WriteLine("!save FILE - Save command history");
+        Console.WriteLine();
+        Console.WriteLine("=== Special Functions ===");
+        Console.WriteLine("import(typename) - Import a .NET type");
+        Console.WriteLine("history()        - Show history from Lua");
+        Console.WriteLine();
+    }
+    
+    private void LoadScript(string filename)
+    {
+        if (string.IsNullOrWhiteSpace(filename))
+        {
+            Console.WriteLine("Usage: !load <filename>");
+            return;
+        }
+        
+        try
+        {
+            script.DoFile(filename);
+            Console.WriteLine($"Loaded: {filename}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading file: {ex.Message}");
+        }
+    }
+    
+    private void SaveHistory(string filename)
+    {
+        if (string.IsNullOrWhiteSpace(filename))
+        {
+            Console.WriteLine("Usage: !save <filename>");
+            return;
+        }
+        
+        try
+        {
+            System.IO.File.WriteAllLines(filename, history);
+            Console.WriteLine($"History saved to: {filename}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving history: {ex.Message}");
+        }
+    }
+    
+    private string FormatResult(LuaValue value)
+    {
+        return value.Type switch
+        {
+            DataType.Number => value.Number.ToString(),
+            DataType.String => value.String,
+            DataType.Boolean => value.Boolean.ToString().ToLower(),
+            DataType.Table => FormatTable(value.Table),
+            _ => value.ToString()
+        };
+    }
+    
+    private string FormatTable(Table table)
+    {
+        // Simple table formatting
+        if (table.Length == 0)
+            return "{}";
+        
+        var items = new List<string>();
+        foreach (var pair in table.Pairs)
+        {
+            items.Add($"{pair.Key} = {pair.Value}");
+        }
+        
+        return "{ " + string.Join(", ", items) + " }";
+    }
+}
+
+// Usage
+class Program
+{
+    static void Main()
+    {
+        var repl = new AdvancedREPL();
+        repl.Run();
+    }
+}
+```
+
+## ReplInterpreter API
+
+### Key Properties
+
+```csharp
+ReplInterpreter repl = new ReplInterpreter(script);
+
+// Enable '=' prefix for expressions
+repl.HandleClassicExprsSyntax = true;
+
+// Check if there's pending input (multiline)
+bool pending = repl.HasPendingCommand;
+
+// Get current pending command
+string current = repl.CurrentPendingCommand;
+
+// Get appropriate prompt (> or >>)
+string prompt = repl.ClassicPrompt;
+```
+
+### Evaluate Method
+
+```csharp
+// Returns:
+// - LuaValue result if code is complete and executes
+// - null if more input is needed
+// - Throws exception on error
+LuaValue result = repl.Evaluate(input);
+
+if (result == null)
+{
+    // Need more input (incomplete code)
+    Console.Write(">> ");
+}
+else if (result.Type != DataType.Void)
+{
+    // Show result
+    Console.WriteLine(result);
+}
+```
+
+## Multiline Input Handling
+
+The REPL automatically handles multiline input:
+
+```lua
+> function factorial(n)
+>>   if n <= 1 then
+>>     return 1
+>>   else
+>>     return n * factorial(n - 1)
+>>   end
+>> end
+> factorial(5)
+120
+```
+
+Implement multiline support:
+
+```csharp
+while (true)
+{
+    Console.Write(repl.ClassicPrompt + " ");
+    string input = Console.ReadLine();
+    
+    try
+    {
+        LuaValue result = repl.Evaluate(input);
+        
+        if (result == null)
+        {
+            // More input needed - loop continues with >> prompt
+            continue;
+        }
+        
+        if (result.Type != DataType.Void)
+        {
+            Console.WriteLine(result);
+        }
+    }
+    catch (SyntaxErrorException ex)
+    {
+        // Only show error if not expecting more input
+        if (!ex.IsPrematureStreamTermination)
+        {
+            Console.WriteLine($"Syntax error: {ex.DecoratedMessage}");
+        }
+    }
+}
+```
+
+## Unity Integration
+
+Create an in-game debug console:
+
+```csharp
+using UnityEngine;
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.REPL;
+using SolarSharp.Interpreter.Errors;
+
+public class UnityREPL : MonoBehaviour
+{
+    private Script script;
+    private ReplInterpreter repl;
+    private string input = "";
+    private string output = "";
+    private Vector2 scrollPos;
+    private bool showConsole = false;
+    
+    void Start()
+    {
+        script = new Script();
+        
+        // Expose Unity objects
+        script.Globals["GameObject"] = typeof(GameObject);
+        script.Globals["Debug"] = typeof(Debug);
+        
+        repl = new ReplInterpreter(script)
+        {
+            HandleClassicExprsSyntax = true
+        };
+        
+        script.Options.DebugPrint = s => output += s + "\n";
+    }
+    
+    void Update()
+    {
+        // Toggle console with tilde key
+        if (Input.GetKeyDown(KeyCode.BackQuote))
+        {
+            showConsole = !showConsole;
+        }
+    }
+    
+    void OnGUI()
+    {
+        if (!showConsole) return;
+        
+        GUILayout.BeginArea(new Rect(10, 10, Screen.width - 20, Screen.height / 2));
+        
+        // Output area
+        scrollPos = GUILayout.BeginScrollView(scrollPos, GUILayout.Height(300));
+        GUILayout.Label(output);
+        GUILayout.EndScrollView();
+        
+        // Input area
+        GUILayout.BeginHorizontal();
+        GUILayout.Label(repl.ClassicPrompt);
+        input = GUILayout.TextField(input, GUILayout.Width(Screen.width - 100));
+        
+        if (GUILayout.Button("Run") || (Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Return))
+        {
+            ExecuteInput();
+        }
+        
+        GUILayout.EndHorizontal();
+        
+        if (GUILayout.Button("Clear"))
+        {
+            output = "";
+        }
+        
+        GUILayout.EndArea();
+    }
+    
+    void ExecuteInput()
+    {
+        if (string.IsNullOrWhiteSpace(input)) return;
+        
+        output += repl.ClassicPrompt + " " + input + "\n";
+        
+        try
+        {
+            var result = repl.Evaluate(input);
+            
+            if (result != null && result.Type != DataType.Void)
+            {
+                output += result + "\n";
+            }
+            
+            input = "";
+        }
+        catch (InterpreterException ex)
+        {
+            output += $"Error: {ex.DecoratedMessage ?? ex.Message}\n";
+            input = "";
+        }
+        
+        // Scroll to bottom
+        scrollPos.y = float.MaxValue;
+    }
+}
+```
+
+## Best Practices
+
+### 1. Handle Incomplete Input
+
+Check `IsPrematureStreamTermination` for multiline support:
+
+```csharp
+catch (SyntaxErrorException ex)
+{
+    if (ex.IsPrematureStreamTermination)
+    {
+        // Continue reading input
+        return null;
+    }
+    else
+    {
+        // Real syntax error
+        throw;
+    }
+}
+```
+
+### 2. Provide Context
+
+Expose useful objects and functions:
+
+```csharp
+script.Globals["help"] = (Action)ShowHelp;
+script.Globals["clear"] = (Action)Console.Clear;
+script.Globals["version"] = Script.VERSION;
+```
+
+### 3. Save History
+
+Implement command history for better UX:
+
+```csharp
+List<string> history = new List<string>();
+int historyIndex = -1;
+
+// On up arrow: show previous command
+// On down arrow: show next command
+```
+
+### 4. Graceful Error Handling
+
+Don't let errors crash the REPL:
+
+```csharp
+try
+{
+    repl.Evaluate(input);
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Error: {ex.Message}");
+    // Continue REPL
+}
+```
+
+## Next Steps
+
+- Explore [Error Handling](/guides/error-handling) for better error messages
+- Learn about [Unity Integration](/guides/unity-integration) for game consoles
+- Check the [API Reference](/api/script) for more details

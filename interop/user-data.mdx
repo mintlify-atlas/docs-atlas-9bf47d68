@@ -1,0 +1,412 @@
+---
+title: UserData Types
+description: Deep dive into UserData registration, descriptors, and custom types
+---
+
+UserData is the core mechanism in SolarSharp for exposing CLR objects to Lua scripts. Understanding how UserData works is essential for effective interoperability.
+
+## What is UserData?
+
+In Lua, userdata is a type that represents arbitrary C data. SolarSharp extends this concept to represent any CLR object, allowing Lua scripts to interact with .NET types seamlessly.
+
+The `UserData` class maintains a global registry of type descriptors that define how Lua can interact with CLR types.
+
+## Type Registration
+
+### Manual Registration
+
+Explicitly register types before using them:
+
+```csharp
+// Basic registration
+UserData.RegisterType<MyClass>();
+
+// With access mode
+UserData.RegisterType<MyClass>(InteropAccessMode.Preoptimized);
+
+// With friendly name
+UserData.RegisterType<MyClass>(InteropAccessMode.Default, "MyFriendlyName");
+
+// Non-generic version
+UserData.RegisterType(typeof(MyClass));
+```
+
+### Assembly Registration
+
+Register all types marked with `[SolarSharpUserData]`:
+
+```csharp
+[SolarSharpUserData]
+public class GameEntity
+{
+    public string Name { get; set; }
+}
+
+[SolarSharpUserData(AccessMode = InteropAccessMode.Preoptimized)]
+public class Player : GameEntity
+{
+    public int Score { get; set; }
+}
+
+// Register all marked types
+UserData.RegisterAssembly();
+
+// Or from specific assembly
+UserData.RegisterAssembly(typeof(GameEntity).Assembly);
+
+// Include extension types
+UserData.RegisterAssembly(includeExtensionTypes: true);
+```
+
+<Note>
+The `[SolarSharpUserData]` attribute allows specifying the `AccessMode` property to control optimization behavior.
+</Note>
+
+## Type Descriptors
+
+Type descriptors (`IUserDataDescriptor`) define how Lua interacts with CLR types. They handle:
+
+- Property and field access
+- Method invocations
+- Metamethod implementations
+- Type compatibility checks
+
+### Getting Descriptors
+
+```csharp
+// Get descriptor for a type
+IUserDataDescriptor descriptor = UserData.GetDescriptorForType<MyClass>(searchInterfaces: true);
+
+// Non-generic version
+IUserDataDescriptor descriptor = UserData.GetDescriptorForType(typeof(MyClass), searchInterfaces: true);
+
+// Get descriptor for an object instance
+var obj = new MyClass();
+IUserDataDescriptor descriptor = UserData.GetDescriptorForObject(obj);
+```
+
+The `searchInterfaces` parameter determines whether to search implemented interfaces if no exact match is found.
+
+### Standard Descriptors
+
+SolarSharp provides several built-in descriptor types:
+
+- **StandardUserDataDescriptor** - For regular classes and structs
+- **StandardEnumUserDataDescriptor** - For enumerations
+- **StandardGenericsUserDataDescriptor** - For generic types
+- **AutoDescribingUserDataDescriptor** - For types implementing `IUserDataType`
+
+## Custom Type Descriptors
+
+Implement `IUserDataDescriptor` for complete control:
+
+```csharp
+public class CustomDescriptor : IUserDataDescriptor
+{
+    public string Name => "CustomType";
+    public Type Type => typeof(MyCustomType);
+    
+    public LuaValue Index(Script script, object obj, LuaValue index, bool isDirectIndexing)
+    {
+        // Handle property/field access
+        if (index.Type == DataType.String)
+        {
+            string key = index.String;
+            // Return appropriate value
+        }
+        return LuaValue.Nil;
+    }
+    
+    public bool SetIndex(Script script, object obj, LuaValue index, LuaValue value, bool isDirectIndexing)
+    {
+        // Handle property/field assignment
+        if (index.Type == DataType.String)
+        {            string key = index.String;
+            // Set the value
+            return true;
+        }
+        return false;
+    }
+    
+    public LuaValue MetaIndex(Script script, object obj, string metaname)
+    {
+        // Handle metamethods like __add, __call, etc.
+        return null; // Return null if not supported
+    }
+    
+    public string AsString(object obj)
+    {
+        return obj?.ToString() ?? "null";
+    }
+    
+    public bool IsTypeCompatible(Type type, object obj)
+    {
+        return type.IsInstanceOfType(obj);
+    }
+}
+
+// Register with custom descriptor
+var descriptor = new CustomDescriptor();
+UserData.RegisterType<MyCustomType>(descriptor);
+```
+
+## IUserDataType Interface
+
+For types that need custom behavior, implement `IUserDataType` to become "self-describing":
+
+```csharp
+public class SmartObject : IUserDataType
+{
+    private Dictionary<string, object> _properties = new();
+    
+    public LuaValue Index(Script script, LuaValue index, bool isDirectIndexing)
+    {
+        if (index.Type == DataType.String)
+        {
+            string key = index.String;
+            if (_properties.TryGetValue(key, out object value))
+            {
+                return LuaValue.FromObject(script, value);
+            }
+        }
+        return LuaValue.Nil;
+    }
+    
+    public bool SetIndex(Script script, LuaValue index, LuaValue value, bool isDirectIndexing)
+    {
+        if (index.Type == DataType.String)
+        {
+            string key = index.String;
+            _properties[key] = value.ToObject();
+            return true;
+        }
+        return false;
+    }
+    
+    public LuaValue MetaIndex(Script script, string metaname)
+    {
+        // Support custom metamethods
+        if (metaname == "__len")
+        {
+            return LuaValue.NewNumber(_properties.Count);
+        }
+        return null;
+    }
+}
+
+// Register with NoReflectionAllowed to use IUserDataType implementation
+UserData.RegisterType<SmartObject>(InteropAccessMode.NoReflectionAllowed);
+```
+
+<Warning>
+Types implementing `IUserDataType` should be registered with `InteropAccessMode.NoReflectionAllowed` to prevent automatic descriptor generation from conflicting with the custom implementation.
+</Warning>
+
+## Creating UserData Values
+
+### From Objects
+
+```csharp
+var obj = new MyClass();
+
+// Automatic descriptor lookup
+LuaValue userdata = UserData.Create(obj);
+
+// With specific descriptor
+IUserDataDescriptor descriptor = UserData.GetDescriptorForType<MyClass>(true);
+LuaValue userdata = UserData.Create(obj, descriptor);
+```
+
+### Static UserData
+
+Create userdata for static members:
+
+```csharp
+// From type
+LuaValue staticUserdata = UserData.CreateStatic<MyClass>();
+LuaValue staticUserdata = UserData.CreateStatic(typeof(MyClass));
+
+// From descriptor
+IUserDataDescriptor descriptor = UserData.GetDescriptorForType<MyClass>(false);
+LuaValue staticUserdata = UserData.CreateStatic(descriptor);
+
+// Use in script
+script.Globals["MyClass"] = UserData.CreateStatic<MyClass>();
+```
+
+## Proxy Types
+
+Proxy types allow wrapping one type with another for Lua interop:
+
+```csharp
+public class Vector3Proxy
+{
+    private Vector3 _vector;
+    
+    public Vector3Proxy(Vector3 vec)
+    {
+        _vector = vec;
+    }
+    
+    public float X => _vector.X;
+    public float Y => _vector.Y;
+    public float Z => _vector.Z;
+    
+    public float Length() => _vector.Length();
+}
+
+// Register proxy with delegate
+UserData.RegisterProxyType<Vector3Proxy, Vector3>(
+    vec => new Vector3Proxy(vec),
+    InteropAccessMode.LazyOptimized
+);
+```
+
+## Checking Registration Status
+
+```csharp
+// Check if exact type is registered
+if (UserData.IsTypeRegistered<MyClass>())
+{
+    Console.WriteLine("MyClass is registered");
+}
+
+if (UserData.IsTypeRegistered(typeof(MyClass)))
+{
+    Console.WriteLine("Type is registered");
+}
+
+// Get all registered types
+IEnumerable<Type> types = UserData.GetRegisteredTypes();
+
+foreach (Type type in types)
+{
+    Console.WriteLine($"Registered: {type.Name}");
+}
+
+// Include historical data (includes unregistered types)
+IEnumerable<Type> allTypes = UserData.GetRegisteredTypes(useHistoricalData: true);
+```
+
+## Unregistering Types
+
+Remove type registrations:
+
+```csharp
+// Unregister a type
+UserData.UnregisterType<MyClass>();
+UserData.UnregisterType(typeof(MyClass));
+```
+
+<Warning>
+Unregistering types at runtime is dangerous:
+- Existing userdata objects may become invalid
+- Scripts may fail unexpectedly
+- Only use for testing or re-registration scenarios
+- Discard all loaded scripts after unregistering
+</Warning>
+
+## UserValue Property
+
+Every UserData instance can store an associated value:
+
+```csharp
+script.DoString(@"
+    function attachMetadata(obj, metadata)
+        debug.setuservalue(obj, metadata)
+    end
+    
+    function getMetadata(obj)
+        return debug.getuservalue(obj)
+    end
+");
+
+var obj = new MyClass();
+LuaValue userdata = UserData.Create(obj);
+
+script.Globals["myObj"] = userdata;
+
+script.Call(script.Globals["attachMetadata"], userdata, "important data");
+LuaValue metadata = script.Call(script.Globals["getMetadata"], userdata);
+
+Console.WriteLine(metadata.String); // "important data"
+```
+
+## Extension Methods
+
+Register extension methods to add functionality to existing types:
+
+```csharp
+public static class ListExtensions
+{
+    public static T GetRandom<T>(this List<T> list)
+    {
+        return list[Random.Shared.Next(list.Count)];
+    }
+    
+    public static void Shuffle<T>(this List<T> list)
+    {
+        int n = list.Count;
+        while (n > 1)
+        {
+            int k = Random.Shared.Next(n--);
+            (list[n], list[k]) = (list[k], list[n]);
+        }
+    }
+}
+
+// Register extension type
+UserData.RegisterExtensionType(typeof(ListExtensions));
+
+// Now List<T> instances have these methods in Lua
+script.Globals["numbers"] = new List<int> { 1, 2, 3, 4, 5 };
+
+script.DoString(@"
+    numbers:Shuffle()
+    local random = numbers:GetRandom()
+    print(random)
+");
+```
+
+<Note>
+Extension methods are registered globally and apply to all instances of the extended type across all scripts.
+</Note>
+
+## Best Practices
+
+<Steps>
+  <Step title="Register Types Early">
+    Register all types during application initialization, before creating Script instances.
+  </Step>
+  
+  <Step title="Use Appropriate Access Modes">
+    Choose access modes based on usage patterns:
+    - Frequently accessed: `Preoptimized`
+    - General purpose: `LazyOptimized` (default)
+    - Rarely accessed: `Reflection`
+  </Step>
+  
+  <Step title="Avoid Runtime Re-registration">
+    Don't unregister and re-register types during normal operation. Design your types correctly from the start.
+  </Step>
+  
+  <Step title="Document Custom Descriptors">
+    If using custom descriptors, document their behavior thoroughly for maintenance.
+  </Step>
+  
+  <Step title="Test Type Compatibility">
+    Test that your registered types work correctly with Lua scripts, especially custom descriptors.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Type Converters" icon="arrows-rotate" href="/interop/converters">
+    Learn about custom type conversion
+  </Card>
+  
+  <Card title="Interop Overview" icon="book" href="/interop/overview">
+    Return to interop system overview
+  </Card>
+</CardGroup>

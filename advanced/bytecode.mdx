@@ -1,0 +1,201 @@
+---
+title: 'Bytecode Compilation'
+description: 'Learn about SolarSharp bytecode compilation, dumping, loading, and format details'
+---
+
+## Overview
+
+SolarSharp uses a register-based bytecode virtual machine inspired by LuaJIT and other modern Lua runtimes. Scripts can be compiled to bytecode, serialized (dumped) for distribution, and loaded back for execution.
+
+## Compiling to Bytecode
+
+All Lua scripts are automatically compiled to bytecode when loaded:
+
+```csharp
+Script script = new Script();
+
+// These methods internally compile code to bytecode
+LuaValue func = script.LoadString("return 42");
+LuaValue result = func.Call();
+```
+
+## Dumping Bytecode
+
+You can serialize compiled functions to bytecode using the `Dump` method:
+
+```csharp
+Script script = new Script();
+LuaValue function = script.LoadString(@"
+    function factorial(n)
+        if n == 0 then return 1 end
+        return n * factorial(n - 1)
+    end
+    return factorial
+")();
+
+// Dump to a file stream
+using (FileStream fs = File.Create("factorial.luac"))
+{
+    script.Dump(function, fs);
+}
+```
+
+### Using string.dump
+
+You can also dump functions from Lua code:
+
+```lua
+local chunk = load('return 81')
+local bytecode = string.dump(chunk)
+local fn = load(bytecode)
+return fn() -- returns 81
+```
+
+### Restrictions
+
+Functions with upvalues (closures) other than `_ENV` cannot be dumped:
+
+```csharp
+Script script = new Script();
+script.DoString(@"
+    local x = 10
+    function uses_upvalue()
+        return x
+    end
+");
+
+var func = script.Globals.Get("uses_upvalue");
+
+using (MemoryStream ms = new MemoryStream())
+{
+    // Throws ArgumentException: "function arg has upvalues other than _ENV"
+    script.Dump(func, ms);
+}
+```
+
+## Loading Bytecode
+
+Load compiled bytecode using `LoadStream`:
+
+```csharp
+// Load from file
+Script script = new Script();
+using (FileStream fs = File.OpenRead("factorial.luac"))
+{
+    LuaValue function = script.LoadStream(fs);
+    LuaValue result = function.Call(5); // returns 120
+}
+```
+
+### Base64-Encoded Bytecode
+
+SolarSharp supports loading Base64-encoded bytecode strings:
+
+```csharp
+Script script = new Script();
+string base64Bytecode = "//BASE64//" + Convert.ToBase64String(bytecodeBytes);
+LuaValue function = script.LoadString(base64Bytecode);
+```
+
+## Bytecode Format
+
+### File Header
+
+Every bytecode dump begins with metadata (12+ bytes):
+
+- **Magic Number** (8 bytes): `0x1D4F4F4E23020D1A` identifies SolarSharp bytecode
+- **Version** (4 bytes): Current version `0x150`
+- **Upvalues Flag** (1 byte): Whether function has upvalues
+- **Instruction Count** (4 bytes): Number of bytecode instructions
+
+### Architecture
+
+SolarSharp uses a **register-based VM** (not stack-based like standard Lua 5.x):
+
+- Each instruction is **32 bits** (4 bytes)
+- Supports up to **256 registers** per function
+- **64 opcodes** available (6-bit opcode + 2-bit sub-opcode)
+- Constant tables for integers, floats, strings, and upvalues
+
+### Instruction Format
+
+Most instructions follow this structure:
+
+| Field | Bits | Description |
+|-------|------|-------------|
+| A | 8 | Register/constant index |
+| B | 8 | Register/constant index |
+| C | 8 | Register/constant index |
+| OP | 6 | Primary opcode |
+| OP2 | 2 | Secondary opcode/variant |
+
+### Example Operations
+
+**Memory Operations:**
+```
+MOV (REG): R(A) = R(B)           // Copy register
+MOV (IMM): R(A) = B              // Load immediate
+MOV (CST): R(A) = Const(B)       // Load constant
+```
+
+**Math Operations:**
+```
+ADD_rr: R(A) = R(B) + R(C)       // Add registers
+ADD_ri: R(A) = R(B) + C          // Add immediate
+MUL_rr: R(A) = R(B) * R(C)       // Multiply
+```
+
+**Table Operations:**
+```
+TBL_GET: R(A) = R(B)[R(C)]       // Table read
+TBL_SET: R(B)[R(C)] = R(A)       // Table write
+GBL_GET: R(A) = _ENV[Const(B)]   // Global read
+```
+
+**Control Flow:**
+```
+JMP: Jump to offset B
+JMP_EQ: Jump if R(A) == R(B)
+CALL: R(A)(R(A+1)...R(A+B))      // Function call
+RET: return R(A)...R(A+B-1)      // Return values
+```
+
+## Performance Considerations
+
+### Register VM Benefits
+
+- **Fewer instructions** for common operations
+- **Less stack manipulation** overhead
+- **Better CPU cache utilization**
+- **Optimized for JIT compilation** (future enhancement)
+
+### Type Hints
+
+Bytecode includes type hints (OP2 field) for optimization:
+
+```
+OP2 = 0x01: Both operands are integers
+OP2 = 0x10: Both operands are floats
+OP2 = 0x00: Mixed/unknown types
+```
+
+These hints enable **fast paths** for homogeneous operations.
+
+## CLI Compilation
+
+Use the SolarSharp CLI to compile scripts:
+
+```bash
+solarsharp compile script.lua -o script.luac
+```
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Performance" icon="gauge-high" href="/advanced/performance">
+    Optimize script execution
+  </Card>
+  <Card title="Debugging" icon="bug" href="/advanced/debugging">
+    Debug compiled scripts
+  </Card>
+</CardGroup>

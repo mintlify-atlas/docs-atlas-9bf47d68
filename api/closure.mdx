@@ -1,0 +1,236 @@
+---
+title: 'Closure'
+description: 'A class representing a Lua function'
+---
+
+The `Closure` class represents a Lua function (technically a closure with upvalues). It wraps bytecode and any captured variables from outer scopes.
+
+## Properties
+
+<ResponseField name="OwnerScript" type="Script">
+  Gets the script owning this function.
+  
+  ```csharp
+  Script owner = closure.OwnerScript;
+  ```
+</ResponseField>
+
+<ResponseField name="EntryPointByteCodeLocation" type="int">
+  Gets the entry point location in bytecode. Used internally by the VM.
+</ResponseField>
+
+## Call Methods
+
+<ParamField path="Call()" type="method">
+  Calls this function with no arguments.
+  
+  <ResponseField name="returns" type="LuaValue">
+    The return value(s) of the function
+  </ResponseField>
+  
+  ```csharp
+  LuaValue func = script.Globals.Get("myFunction").Function;
+  LuaValue result = func.Call();
+  ```
+</ParamField>
+
+<ParamField path="Call(params object[])" type="method">
+  Calls this function with the specified CLR arguments.
+  
+  <Expandable title="parameters">
+    <ParamField path="args" type="params object[]" required>
+      The arguments (automatically converted to LuaValues)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The return value(s) of the function
+  </ResponseField>
+  
+  ```csharp
+  LuaValue result = func.Call(10, "hello", true);
+  ```
+</ParamField>
+
+<ParamField path="Call(params LuaValue[])" type="method">
+  Calls this function with the specified Lua arguments.
+  
+  <Expandable title="parameters">
+    <ParamField path="args" type="params LuaValue[]" required>
+      The Lua arguments
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The return value(s) of the function
+  </ResponseField>
+  
+  ```csharp
+  LuaValue result = func.Call(
+      LuaValue.NewNumber(42),
+      LuaValue.NewString("test")
+  );
+  ```
+</ParamField>
+
+## Delegate Conversion
+
+<ParamField path="GetDelegate()" type="method">
+  Gets a delegate wrapping calls to this scripted function.
+  
+  <ResponseField name="returns" type="ScriptFunctionDelegate">
+    A delegate that can be called from C#
+  </ResponseField>
+  
+  ```csharp
+  ScriptFunctionDelegate del = func.GetDelegate();
+  object result = del(1, 2, 3);
+  ```
+</ParamField>
+
+<ParamField path="GetDelegate<T>()" type="method">
+  Gets a strongly-typed delegate wrapping calls to this scripted function.
+  
+  <ResponseField name="returns" type="ScriptFunctionDelegate<T>">
+    A delegate returning the specified type
+  </ResponseField>
+  
+  ```csharp
+  ScriptFunctionDelegate<int> del = func.GetDelegate<int>();
+  int result = del(1, 2); // Automatically converted to int
+  ```
+</ParamField>
+
+## Upvalue Methods
+
+<ParamField path="GetUpvaluesCount" type="method">
+  Gets the number of upvalues (captured variables) in this closure.
+  
+  <ResponseField name="returns" type="int">
+    The number of upvalues
+  </ResponseField>
+  
+  ```csharp
+  int count = closure.GetUpvaluesCount();
+  ```
+</ParamField>
+
+<ParamField path="GetUpvalueName" type="method">
+  Gets the name of the specified upvalue.
+  
+  <Expandable title="parameters">
+    <ParamField path="idx" type="int" required>
+      The index of the upvalue (0-based)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="string">
+    The upvalue name
+  </ResponseField>
+  
+  ```csharp
+  string name = closure.GetUpvalueName(0);
+  ```
+</ParamField>
+
+<ParamField path="GetUpvalue" type="method">
+  Gets the value of an upvalue. To set the value, use GetUpvalue(idx).Assign(...).
+  
+  <Expandable title="parameters">
+    <ParamField path="idx" type="int" required>
+      The index of the upvalue (0-based)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The upvalue
+  </ResponseField>
+  
+  ```csharp
+  LuaValue upval = closure.GetUpvalue(0);
+  Console.WriteLine($"Upvalue: {upval}");
+  
+  // Modify the upvalue
+  upval.Assign(LuaValue.NewNumber(42));
+  ```
+</ParamField>
+
+<ParamField path="GetUpvaluesType" type="method">
+  Gets the type of upvalues contained in this closure.
+  
+  <ResponseField name="returns" type="UpvaluesType">
+    None (no upvalues), Environment (only _ENV), or Closure (real closure with multiple upvalues)
+  </ResponseField>
+  
+  ```csharp
+  var type = closure.GetUpvaluesType();
+  if (type == Closure.UpvaluesType.None) {
+      Console.WriteLine("Pure function, no upvalues");
+  }
+  ```
+</ParamField>
+
+## UpvaluesType Enum
+
+<ResponseField name="None" type="enum">
+  The closure has no upvalues (technically a function, not a closure).
+</ResponseField>
+
+<ResponseField name="Environment" type="enum">
+  The closure has _ENV as its only upvalue.
+</ResponseField>
+
+<ResponseField name="Closure" type="enum">
+  The closure is a real closure with multiple upvalues.
+</ResponseField>
+
+## Example Usage
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+
+var script = new Script();
+
+// Define a function in Lua
+script.DoString(@"
+    function add(a, b)
+        return a + b
+    end
+    
+    function makeCounter()
+        local count = 0
+        return function()
+            count = count + 1
+            return count
+        end
+    end
+");
+
+// Get and call a simple function
+Closure addFunc = script.Globals.Get("add").Function;
+LuaValue result = addFunc.Call(10, 20);
+Console.WriteLine(result.Number); // 30
+
+// Use as a delegate
+ScriptFunctionDelegate<double> addDel = addFunc.GetDelegate<double>();
+double sum = addDel(5, 7); // 12.0
+
+// Get a closure with upvalues
+LuaValue counterFunc = script.Call(script.Globals.Get("makeCounter"));
+Closure counter = counterFunc.Function;
+
+Console.WriteLine($"Upvalues: {counter.GetUpvaluesCount()}"); // 1 (count variable)
+Console.WriteLine($"Upvalue name: {counter.GetUpvalueName(0)}"); // "count"
+
+// Call the counter multiple times
+Console.WriteLine(counter.Call().Number); // 1
+Console.WriteLine(counter.Call().Number); // 2
+Console.WriteLine(counter.Call().Number); // 3
+
+// Inspect and modify upvalue
+LuaValue countUpvalue = counter.GetUpvalue(0);
+Console.WriteLine($"Current count: {countUpvalue.Number}");
+countUpvalue.Assign(LuaValue.NewNumber(100));
+Console.WriteLine(counter.Call().Number); // 101
+```

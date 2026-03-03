@@ -1,0 +1,450 @@
+---
+title: Calling Lua from C#
+description: Execute Lua functions and access Lua values from C# code
+---
+
+SolarSharp provides powerful capabilities for calling Lua functions from C# code, allowing you to leverage Lua scripts as extensible logic within your .NET applications.
+
+## Executing Lua Code
+
+The simplest way to execute Lua code is using the `DoString` method:
+
+```csharp
+var script = new Script();
+
+// Execute Lua code and get the result
+LuaValue result = script.DoString("return 2 + 2");
+Console.WriteLine(result.Number); // 4
+```
+
+### Loading Scripts from Files
+
+```csharp
+// Load and execute a Lua file
+LuaValue result = script.DoFile("scripts/myscript.lua");
+
+// Or load as a string first
+string luaCode = File.ReadAllText("scripts/logic.lua");
+LuaValue result = script.DoString(luaCode);
+```
+
+## Calling Lua Functions
+
+The `Call` method is the primary way to invoke Lua functions from C#:
+
+### Basic Function Calls
+
+```csharp
+var script = new Script();
+
+script.DoString(@"
+    function add(a, b)
+        return a + b
+    end
+    
+    function greet(name)
+        return 'Hello, ' .. name
+    end
+");
+
+// Get the function from globals
+LuaValue addFunc = script.Globals["add"];
+LuaValue greetFunc = script.Globals["greet"];
+
+// Call with LuaValue arguments
+LuaValue sum = script.Call(addFunc, LuaValue.NewNumber(5), LuaValue.NewNumber(3));
+Console.WriteLine(sum.Number); // 8
+
+// Call with object arguments (automatically converted)
+LuaValue greeting = script.Call(greetFunc, "Alice");
+Console.WriteLine(greeting.String); // "Hello, Alice"
+```
+
+### Call Method Overloads
+
+The `Call` method has several overloads for convenience:
+
+<CodeGroup>
+```csharp No Arguments
+// Call function with no arguments
+LuaValue result = script.Call(function);
+```
+
+```csharp LuaValue Arguments
+// Call with LuaValue parameters
+LuaValue result = script.Call(function, 
+    LuaValue.NewNumber(10), 
+    LuaValue.NewString("test"));
+```
+
+```csharp Object Arguments
+// Call with object parameters (auto-converted)
+LuaValue result = script.Call(function, 10, "test", true);
+```
+</CodeGroup>
+
+## Working with Return Values
+
+### Single Return Values
+
+```csharp
+script.DoString(@"
+    function multiply(x, y)
+        return x * y
+    end
+");
+
+LuaValue func = script.Globals["multiply"];
+LuaValue result = script.Call(func, 6, 7);
+
+Console.WriteLine(result.Number); // 42
+```
+
+### Multiple Return Values
+
+Lua functions can return multiple values, which SolarSharp returns as a `Tuple`:
+
+```csharp
+script.DoString(@"
+    function getDimensions()
+        return 1920, 1080, 'landscape'
+    end
+");
+
+LuaValue result = script.Call(script.Globals["getDimensions"]);
+
+if (result.Type == DataType.Tuple)
+{
+    LuaValue[] values = result.Tuple;
+    double width = values[0].Number;      // 1920
+    double height = values[1].Number;     // 1080
+    string orientation = values[2].String; // "landscape"
+}
+```
+
+### Converting Return Values
+
+Convert `LuaValue` results to CLR types:
+
+```csharp
+LuaValue result = script.Call(someFunction);
+
+// To object
+object obj = result.ToObject();
+
+// To specific type
+int number = (int)result.ToObject();
+string text = result.ToString();
+bool flag = result.Boolean;
+
+// Check type first
+if (result.Type == DataType.Number)
+{
+    double value = result.Number;
+}
+```
+
+## Passing C# Objects to Lua Functions
+
+You can pass registered C# objects directly to Lua functions:
+
+```csharp
+[SolarSharpUserData]
+public class Player
+{
+    public string Name { get; set; }
+    public int Health { get; set; }
+}
+
+UserData.RegisterType<Player>();
+
+var script = new Script();
+script.DoString(@"
+    function healPlayer(player, amount)
+        player.Health = player.Health + amount
+        return player.Health
+    end
+");
+
+var player = new Player { Name = "Hero", Health = 50 };
+LuaValue result = script.Call(script.Globals["healPlayer"], player, 25);
+
+Console.WriteLine(result.Number);  // 75
+Console.WriteLine(player.Health);  // 75 (object was modified)
+```
+
+## Using Closures
+
+Closures provide a more convenient way to call Lua functions:
+
+```csharp
+script.DoString(@"
+    function calculate(op, a, b)
+        if op == 'add' then return a + b
+        elseif op == 'sub' then return a - b
+        elseif op == 'mul' then return a * b
+        elseif op == 'div' then return a / b
+        end
+    end
+");
+
+// Get as Closure
+Closure calcFunc = script.Globals.Get("calculate").Function;
+
+// Call the closure directly
+LuaValue result = calcFunc.Call("mul", 6, 7);
+Console.WriteLine(result.Number); // 42
+```
+
+## Handling Lua Tables
+
+Access and manipulate Lua tables from C#:
+
+```csharp
+script.DoString(@"
+    function createConfig()
+        return {
+            width = 1920,
+            height = 1080,
+            fullscreen = true,
+            title = 'My Game'
+        }
+    end
+");
+
+LuaValue result = script.Call(script.Globals["createConfig"]);
+Table config = result.Table;
+
+// Access table values
+int width = (int)config["width"];
+int height = (int)config["height"];
+bool fullscreen = config["fullscreen"].Boolean;
+string title = config["title"].String;
+
+Console.WriteLine($"{width}x{height}, Fullscreen: {fullscreen}");
+```
+
+### Passing Tables to Lua
+
+```csharp
+var script = new Script();
+
+script.DoString(@"
+    function processConfig(cfg)
+        print(cfg.name)
+        print(cfg.version)
+        return cfg.enabled
+    end
+");
+
+// Create a table in C#
+Table config = new Table(script);
+config["name"] = "MyApp";
+config["version"] = "1.0";
+config["enabled"] = true;
+
+LuaValue result = script.Call(script.Globals["processConfig"], config);
+Console.WriteLine(result.Boolean); // true
+```
+
+## Error Handling
+
+Handle Lua errors gracefully:
+
+```csharp
+try
+{
+    script.DoString(@"
+        function divide(a, b)
+            if b == 0 then
+                error('Division by zero!')
+            end
+            return a / b
+        end
+    ");
+    
+    LuaValue result = script.Call(script.Globals["divide"], 10, 0);
+}
+catch (ScriptRuntimeException ex)
+{
+    Console.WriteLine($"Lua error: {ex.Message}");
+    Console.WriteLine($"Call stack: {ex.CallStack}");
+}
+```
+
+## Using Script.Call vs Closure.Call
+
+<CodeGroup>
+```csharp Script.Call
+// Using Script.Call
+LuaValue func = script.Globals["myFunction"];
+LuaValue result = script.Call(func, arg1, arg2);
+```
+
+```csharp Closure.Call
+// Using Closure.Call (more direct)
+Closure func = script.Globals.Get("myFunction").Function;
+LuaValue result = func.Call(arg1, arg2);
+```
+</CodeGroup>
+
+<Note>
+Both approaches work identically. `Closure.Call` is slightly more direct but requires the function to be a Closure. `Script.Call` can also invoke CLR functions and handle callables via `__call` metamethods.
+</Note>
+
+## Calling Table Methods
+
+Call methods on Lua table objects:
+
+```csharp
+script.DoString(@"
+    Person = {}
+    Person.__index = Person
+    
+    function Person.new(name, age)
+        local self = setmetatable({}, Person)
+        self.name = name
+        self.age = age
+        return self
+    end
+    
+    function Person:greet()
+        return 'Hello, I am ' .. self.name
+    end
+    
+    function Person:getAge()
+        return self.age
+    end
+");
+
+// Create a Person instance
+Closure personConstructor = script.Globals.Get("Person").Table.Get("new").Function;
+LuaValue personObj = personConstructor.Call("Alice", 30);
+Table person = personObj.Table;
+
+// Call methods on the person instance
+LuaValue greetMethod = person.Get("greet");
+LuaValue greeting = script.Call(greetMethod, person); // Pass person as self
+Console.WriteLine(greeting.String); // "Hello, I am Alice"
+
+LuaValue ageMethod = person.Get("getAge");
+LuaValue age = script.Call(ageMethod, person);
+Console.WriteLine(age.Number); // 30
+```
+
+## Dynamic Function Invocation
+
+Call Lua functions dynamically based on runtime conditions:
+
+```csharp
+script.DoString(@"
+    handlers = {
+        onStart = function() return 'Starting...' end,
+        onUpdate = function(dt) return 'Updating: ' .. dt end,
+        onStop = function() return 'Stopping...' end
+    }
+");
+
+Table handlers = script.Globals.Get("handlers").Table;
+
+string[] events = { "onStart", "onUpdate", "onStop" };
+
+foreach (string eventName in events)
+{
+    LuaValue handler = handlers.Get(eventName);
+    
+    if (handler.Type == DataType.Function)
+    {
+        LuaValue result = eventName == "onUpdate" 
+            ? script.Call(handler, 0.016) 
+            : script.Call(handler);
+            
+        Console.WriteLine(result.String);
+    }
+}
+```
+
+## Performance Optimization
+
+<Steps>
+  <Step title="Cache Function References">
+    Avoid looking up functions in globals repeatedly:
+    
+    ```csharp
+    // Bad - looks up function every iteration
+    for (int i = 0; i < 1000; i++)
+    {
+        script.Call(script.Globals["process"], i);
+    }
+    
+    // Good - cache the function reference
+    LuaValue processFunc = script.Globals["process"];
+    for (int i = 0; i < 1000; i++)
+    {
+        script.Call(processFunc, i);
+    }
+    ```
+  </Step>
+  
+  <Step title="Reuse LuaValue Objects">
+    Minimize allocations by reusing LuaValue instances when possible:
+    
+    ```csharp
+    LuaValue[] args = new LuaValue[2];
+    args[0] = LuaValue.NewNumber(0);
+    args[1] = LuaValue.NewString("data");
+    
+    for (int i = 0; i < 1000; i++)
+    {
+        args[0] = LuaValue.NewNumber(i);
+        script.Call(func, args);
+    }
+    ```
+  </Step>
+  
+  <Step title="Batch Operations">
+    Instead of calling Lua for each operation, batch operations when possible:
+    
+    ```csharp
+    // Pass a table of items to process in one call
+    Table items = new Table(script);
+    for (int i = 0; i < 100; i++)
+    {
+        items[i + 1] = i * 2;
+    }
+    
+    script.Call(script.Globals["processBatch"], items);
+    ```
+  </Step>
+</Steps>
+
+## Advanced: Using ScriptFunctionDelegate
+
+Convert Lua functions to C# delegates:
+
+```csharp
+script.DoString(@"
+    function transform(value)
+        return value * 2
+    end
+");
+
+Closure luaFunc = script.Globals.Get("transform").Function;
+ScriptFunctionDelegate del = luaFunc.GetDelegate();
+
+// Use as a C# delegate
+LuaValue result = del(LuaValue.NewNumber(21));
+Console.WriteLine(result.Number); // 42
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="UserData Types" icon="database" href="/interop/user-data">
+    Learn about UserData registration and custom types
+  </Card>
+  
+  <Card title="Type Converters" icon="arrows-rotate" href="/interop/converters">
+    Customize type conversion between Lua and CLR
+  </Card>
+</CardGroup>

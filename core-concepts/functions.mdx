@@ -1,0 +1,577 @@
+---
+title: "Functions"
+description: "Calling Lua functions from C#, handling return values, closures, and callbacks"
+---
+
+## Overview
+
+SolarSharp provides powerful interoperability between C# and Lua functions. You can call Lua functions from C#, expose C# methods to Lua, and handle multiple return values seamlessly.
+
+## Calling Lua Functions
+
+### Basic Function Calls
+
+```csharp
+Script script = new Script();
+
+// Load a Lua function
+LuaValue func = script.LoadString("return function(x) return x * 2 end");
+LuaValue result = script.Call(func);
+
+// The result is the function itself
+Console.WriteLine(result.Type); // DataType.Function
+
+// Execute the function
+LuaValue doubled = script.Call(result, LuaValue.NewNumber(21));
+Console.WriteLine(doubled.Number); // 42
+```
+
+### The Call Method
+
+The `Script.Call` method executes functions:
+
+```csharp
+// No arguments
+LuaValue result = script.Call(function);
+
+// With LuaValue arguments
+LuaValue result = script.Call(function, 
+    LuaValue.NewNumber(10),
+    LuaValue.NewString("hello")
+);
+
+// With CLR object arguments (auto-converted)
+LuaValue result = script.Call(function, 10, "hello", true);
+
+// Mix of both
+LuaValue result = script.Call(function, 
+    42,                           // Auto-converted to LuaValue
+    LuaValue.NewString("world")   // Already a LuaValue
+);
+```
+
+### Calling Global Functions
+
+```csharp
+script.DoString(@"
+    function greet(name)
+        return 'Hello, ' .. name .. '!'
+    end
+");
+
+// Get function from globals
+LuaValue greetFunc = script.Globals.Get("greet");
+
+// Call it
+LuaValue result = script.Call(greetFunc, "Alice");
+Console.WriteLine(result.String); // "Hello, Alice!"
+```
+
+### Calling Table Methods
+
+```csharp
+script.DoString(@"
+    player = {
+        name = 'Hero',
+        health = 100,
+        
+        takeDamage = function(self, amount)
+            self.health = self.health - amount
+            return self.health
+        end
+    }
+");
+
+Table player = script.Globals.Get("player").Table;
+LuaValue takeDamage = player.Get("takeDamage");
+
+// Call with 'self' as first argument
+LuaValue newHealth = script.Call(takeDamage, 
+    LuaValue.NewTable(player),  // self
+    LuaValue.NewNumber(20)       // amount
+);
+
+Console.WriteLine(newHealth.Number); // 80
+```
+
+## Multiple Return Values
+
+Lua functions can return multiple values, which SolarSharp represents as tuples:
+
+```csharp
+script.DoString(@"
+    function minmax(a, b)
+        if a < b then
+            return a, b
+        else
+            return b, a
+        end
+    end
+");
+
+LuaValue minmaxFunc = script.Globals.Get("minmax");
+LuaValue result = script.Call(minmaxFunc, 10, 5);
+
+if (result.Type == DataType.Tuple)
+{
+    LuaValue min = result.Tuple[0];
+    LuaValue max = result.Tuple[1];
+    
+    Console.WriteLine($"Min: {min.Number}, Max: {max.Number}");
+    // Min: 5, Max: 10
+}
+
+// Convert to scalar to get just the first value
+LuaValue firstOnly = result.ToScalar();
+Console.WriteLine(firstOnly.Number); // 5
+```
+
+## Creating Callbacks (C# → Lua)
+
+Expose C# functions to Lua code:
+
+### Simple Callbacks
+
+```csharp
+using SolarSharp.Interpreter.Execution;
+
+Script script = new Script();
+
+// Create a callback
+LuaValue callback = LuaValue.NewCallback(
+    (ScriptExecutionContext context, CallbackArguments args) =>
+    {
+        double x = args[0].Number;
+        double y = args[1].Number;
+        return LuaValue.NewNumber(x + y);
+    }
+);
+
+// Register in globals
+script.Globals["add"] = callback;
+
+// Call from Lua
+LuaValue result = script.DoString("return add(10, 32)");
+Console.WriteLine(result.Number); // 42
+```
+
+### CallbackArguments
+
+The `CallbackArguments` class provides access to function arguments:
+
+```csharp
+LuaValue func = LuaValue.NewCallback((ctx, args) =>
+{
+    // Get argument count
+    int count = args.Count;
+    
+    // Access by index
+    LuaValue first = args[0];
+    LuaValue second = args[1];
+    
+    // Get as specific types
+    string str = args.AsType(0, "myFunction", DataType.String).String;
+    double num = args.AsType(1, "myFunction", DataType.Number).Number;
+    
+    // Check if argument exists
+    bool hasThird = count > 2;
+    
+    // Convert to object array
+    object[] allArgs = args.GetArray();
+    
+    return LuaValue.Nil;
+});
+```
+
+### ScriptExecutionContext
+
+The context provides access to the script during callback execution:
+
+```csharp
+LuaValue func = LuaValue.NewCallback((ctx, args) =>
+{
+    // Get the Script instance
+    Script script = ctx.GetScript();
+    
+    // Call other Lua functions
+    LuaValue luaFunc = script.Globals.Get("someFunction");
+    LuaValue result = ctx.Call(luaFunc, args[0]);
+    
+    // Access global variables
+    Table globals = ctx.CurrentGlobalEnv;
+    
+    return result;
+});
+```
+
+### From Delegates
+
+Automatically convert C# delegates:
+
+```csharp
+Script script = new Script();
+
+// Simple function
+Func<int, int, int> add = (a, b) => a + b;
+script.Globals["add"] = add;
+
+// Function with no return
+Action<string> log = (msg) => Console.WriteLine($"[LOG] {msg}");
+script.Globals["log"] = log;
+
+// Use from Lua
+script.DoString(@"
+    print(add(5, 7))  -- 12
+    log('Hello!')     -- [LOG] Hello!
+");
+```
+
+## Closures
+
+Lua closures capture their environment:
+
+```csharp
+script.DoString(@"
+    function makeCounter()
+        local count = 0
+        return function()
+            count = count + 1
+            return count
+        end
+    end
+    
+    counter1 = makeCounter()
+    counter2 = makeCounter()
+");
+
+LuaValue counter1 = script.Globals.Get("counter1");
+LuaValue counter2 = script.Globals.Get("counter2");
+
+// Each closure has its own state
+Console.WriteLine(script.Call(counter1).Number); // 1
+Console.WriteLine(script.Call(counter1).Number); // 2
+Console.WriteLine(script.Call(counter2).Number); // 1
+Console.WriteLine(script.Call(counter1).Number); // 3
+```
+
+## Function Properties
+
+Access function metadata:
+
+```csharp
+LuaValue func = script.LoadString("return function(x, y) return x + y end");
+LuaValue closure = script.Call(func);
+
+if (closure.Type == DataType.Function)
+{
+    Closure c = closure.Function;
+    
+    // Get entry point address
+    int address = c.EntryPointByteCodeLocation;
+    
+    // Get closure upvalues type
+    Closure.UpvaluesType upvalues = c.GetUpvaluesType();
+    
+    Console.WriteLine($"Function at address: {address:X8}");
+}
+```
+
+## Variadic Functions
+
+Handle functions with variable arguments:
+
+```csharp
+script.DoString(@"
+    function sum(...)
+        local total = 0
+        for _, v in ipairs({...}) do
+            total = total + v
+        end
+        return total
+    end
+");
+
+LuaValue sumFunc = script.Globals.Get("sum");
+
+// Call with different numbers of arguments
+Console.WriteLine(script.Call(sumFunc, 1, 2, 3).Number);        // 6
+Console.WriteLine(script.Call(sumFunc, 5, 10, 15, 20).Number); // 50
+```
+
+### Creating Variadic Callbacks
+
+```csharp
+LuaValue varargsFunc = LuaValue.NewCallback((ctx, args) =>
+{
+    double sum = 0;
+    
+    // Iterate over all arguments
+    for (int i = 0; i < args.Count; i++)
+    {
+        if (args[i].Type == DataType.Number)
+            sum += args[i].Number;
+    }
+    
+    return LuaValue.NewNumber(sum);
+});
+
+script.Globals["sum"] = varargsFunc;
+script.DoString("print(sum(1, 2, 3, 4, 5))"); // 15
+```
+
+## Tail Calls
+
+Optimize recursive functions with tail call requests:
+
+```csharp
+LuaValue tailCallFunc = LuaValue.NewCallback((ctx, args) =>
+{
+    LuaValue luaFunc = ctx.CurrentGlobalEnv.Get("recursiveFunction");
+    
+    // Return a tail call request instead of calling directly
+    // This prevents stack overflow in deep recursion
+    return LuaValue.NewTailCallReq(luaFunc, args[0]);
+});
+```
+
+<Note>
+Tail calls are an optimization that prevents stack overflow in recursive functions. SolarSharp supports tail call optimization with configurable thresholds.
+</Note>
+
+## Error Handling in Callbacks
+
+Handle errors gracefully:
+
+```csharp
+using SolarSharp.Interpreter.Errors;
+
+LuaValue safeFunc = LuaValue.NewCallback((ctx, args) =>
+{
+    try
+    {
+        // Validate arguments
+        if (args.Count < 2)
+            throw new ScriptRuntimeException("Expected at least 2 arguments");
+            
+        if (args[0].Type != DataType.Number)
+            throw new ScriptRuntimeException("First argument must be a number");
+        
+        double x = args[0].Number;
+        double y = args[1].Number;
+        
+        if (y == 0)
+            throw new ScriptRuntimeException("Division by zero");
+        
+        return LuaValue.NewNumber(x / y);
+    }
+    catch (ScriptRuntimeException)
+    {
+        throw; // Re-throw Lua errors
+    }
+    catch (Exception ex)
+    {
+        // Wrap CLR exceptions
+        throw new ScriptRuntimeException(ex.Message);
+    }
+});
+
+script.Globals["divide"] = safeFunc;
+
+try
+{
+    script.DoString("divide(10, 0)");
+}
+catch (ScriptRuntimeException ex)
+{
+    Console.WriteLine($"Error: {ex.Message}");
+}
+```
+
+## The __call Metamethod
+
+Make tables callable like functions:
+
+```csharp
+script.DoString(@"
+    Calculator = {}
+    
+    function Calculator:new()
+        local obj = { value = 0 }
+        setmetatable(obj, self)
+        self.__index = self
+        return obj
+    end
+    
+    function Calculator:__call(x)
+        self.value = self.value + x
+        return self.value
+    end
+    
+    calc = Calculator:new()
+    print(calc(10))  -- 10
+    print(calc(5))   -- 15
+");
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Cache frequently used functions">
+    ```csharp
+    // Good - cache the function reference
+    LuaValue updateFunc = script.Globals.Get("update");
+    
+    while (running)
+    {
+        script.Call(updateFunc, deltaTime);
+    }
+    
+    // Less efficient - looks up every frame
+    while (running)
+    {
+        LuaValue func = script.Globals.Get("update");
+        script.Call(func, deltaTime);
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Validate callback arguments">
+    ```csharp
+    LuaValue func = LuaValue.NewCallback((ctx, args) =>
+    {
+        // Always validate arguments
+        if (args.Count < 1)
+            throw new ScriptRuntimeException("Missing argument");
+            
+        // Use AsType for type checking
+        LuaValue validated = args.AsType(0, "myFunction", DataType.Number);
+        
+        return LuaValue.NewNumber(validated.Number * 2);
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Handle multiple return values">
+    ```csharp
+    LuaValue result = script.Call(func);
+    
+    // Check if multiple values returned
+    if (result.Type == DataType.Tuple)
+    {
+        foreach (LuaValue value in result.Tuple)
+        {
+            // Process each return value
+        }
+    }
+    else
+    {
+        // Single return value
+        ProcessValue(result);
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Use descriptive names for callbacks">
+    ```csharp
+    // Good - named callback
+    LuaValue func = LuaValue.NewCallback(
+        (ctx, args) => { /* ... */ },
+        name: "playerTakeDamage"
+    );
+    
+    // Better error messages and debugging
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Common Patterns
+
+### Event Handlers
+
+```csharp
+Script script = new Script();
+
+// Register event handler
+script.DoString(@"
+    function onPlayerDamage(player, amount)
+        print(player.name .. ' took ' .. amount .. ' damage!')
+        player.health = player.health - amount
+    end
+");
+
+LuaValue handler = script.Globals.Get("onPlayerDamage");
+
+// Trigger from C#
+Table player = script.Globals.Get("player").Table;
+script.Call(handler, LuaValue.NewTable(player), 25);
+```
+
+### Callbacks as Arguments
+
+```csharp
+script.DoString(@"
+    function processItems(items, callback)
+        for i, item in ipairs(items) do
+            callback(item)
+        end
+    end
+");
+
+LuaValue processor = script.Globals.Get("processItems");
+Table items = new Table(script,
+    LuaValue.NewString("sword"),
+    LuaValue.NewString("shield"),
+    LuaValue.NewString("potion")
+);
+
+LuaValue printCallback = LuaValue.NewCallback((ctx, args) =>
+{
+    Console.WriteLine($"Item: {args[0].String}");
+    return LuaValue.Nil;
+});
+
+script.Call(processor, LuaValue.NewTable(items), printCallback);
+```
+
+### Factory Functions
+
+```csharp
+script.DoString(@"
+    function createPlayer(name, level)
+        return {
+            name = name,
+            level = level,
+            health = level * 100,
+            
+            levelUp = function(self)
+                self.level = self.level + 1
+                self.health = self.level * 100
+            end
+        }
+    end
+");
+
+LuaValue factory = script.Globals.Get("createPlayer");
+LuaValue player = script.Call(factory, "Hero", 5);
+
+Table playerTable = player.Table;
+Console.WriteLine(playerTable.Get("name").String);   // "Hero"
+Console.WriteLine(playerTable.Get("health").Number); // 500
+```
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Script Execution" href="/core-concepts/script-execution" icon="play">
+    Loading and executing Lua code
+  </Card>
+  <Card title="Lua Values" href="/core-concepts/lua-values" icon="hashtag">
+    Understanding return values and arguments
+  </Card>
+  <Card title="Coroutines" href="/core-concepts/coroutines" icon="arrows-rotate">
+    Asynchronous function execution
+  </Card>
+  <Card title="Callbacks" href="/interop/callbacks" icon="arrow-right-arrow-left">
+    Advanced callback patterns
+  </Card>
+</CardGroup>

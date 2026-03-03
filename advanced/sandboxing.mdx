@@ -1,0 +1,328 @@
+---
+title: 'Script Sandboxing'
+description: 'Secure script execution by restricting access to modules and system resources'
+---
+
+## Overview
+
+Sandboxing restricts what Lua scripts can access, preventing malicious or untrusted code from harming your application or system.
+
+## Security Presets
+
+SolarSharp provides three security presets via `CoreModules`:
+
+### Preset_HardSandbox (Most Restrictive)
+
+```csharp
+Script script = new Script(CoreModules.Preset_HardSandbox);
+```
+
+**Includes only:**
+- `string` - String manipulation
+- `math` - Mathematical functions
+- `table` - Table operations
+- `bit32` - Bitwise operations
+- Basic functions (`assert`, `type`, `tonumber`, `tostring`)
+- Table iterators (`pairs`, `ipairs`, `next`)
+- Global constants (`_G`, `_VERSION`)
+
+**Excludes:**
+- ❌ File I/O (`io`, `file`)
+- ❌ OS functions (`os.execute`, `os.exit`)
+- ❌ Code loading (`load`, `require`, `dofile`)
+- ❌ Debugging (`debug`)
+- ❌ Coroutines
+
+**Use case:** Running completely untrusted code (user scripts, plugins)
+
+### Preset_SoftSandbox (Balanced)
+
+```csharp
+Script script = new Script(CoreModules.Preset_SoftSandbox);
+```
+
+**Adds to HardSandbox:**
+- ✅ Metatables (`setmetatable`, `getmetatable`)
+- ✅ Error handling (`pcall`, `xpcall`)
+- ✅ Coroutines (`coroutine.*`)
+- ✅ Time functions (`os.time`, `os.date`, `os.clock`)
+- ✅ JSON parsing (`json`)
+- ✅ Dynamic code (`load`, `loadfile`)
+
+**Still excludes:**
+- ❌ File I/O
+- ❌ System commands (`os.execute`)
+- ❌ Debugging
+
+**Use case:** Trusted user scripts that need more features
+
+### Preset_Default (Full Access)
+
+```csharp
+Script script = new Script(CoreModules.Preset_Default);
+// or
+Script script = new Script();  // Default
+```
+
+**Includes everything except:**
+- ⚠️ Debugging (still excluded)
+
+**Use case:** Internal scripts, development, trusted code
+
+### Preset_Complete (No Restrictions)
+
+```csharp
+Script script = new Script(CoreModules.Preset_Complete);
+```
+
+**Includes everything:**
+- ✅ All standard library modules
+- ✅ Debugging functions
+
+<Warning>
+Grants **full system access**. Only use for completely trusted scripts!
+</Warning>
+
+## Custom Module Selection
+
+Combine individual modules using flags:
+
+```csharp
+Script script = new Script(
+    CoreModules.Basic |
+    CoreModules.String |
+    CoreModules.Math |
+    CoreModules.Table |
+    CoreModules.ErrorHandling
+);
+```
+
+### Available Modules
+
+| Module | Description |
+|--------|-------------|
+| `Basic` | `assert`, `collectgarbage`, `error`, `print`, `select`, `type`, `tonumber`, `tostring` |
+| `GlobalConsts` | `_G`, `_VERSION`, `_SOLARSHARP` |
+| `TableIterators` | `next`, `ipairs`, `pairs` |
+| `Metatables` | `setmetatable`, `getmetatable`, `rawset`, `rawget`, `rawequal`, `rawlen` |
+| `String` | `string` package |
+| `LoadMethods` | `load`, `loadsafe`, `loadfile`, `loadfilesafe`, `dofile`, `require` |
+| `Table` | `table` package |
+| `ErrorHandling` | `pcall`, `xpcall` |
+| `Math` | `math` package |
+| `Coroutine` | `coroutine` package |
+| `Bit32` | `bit32` package |
+| `OS_Time` | `os.clock`, `os.difftime`, `os.date`, `os.time` |
+| `OS_System` | `os.execute`, `os.exit`, `os.getenv`, `os.remove`, `os.rename`, `os.tmpname` |
+| `IO` | `io` and `file` packages |
+| `Debug` | `debug` package (limited support) |
+| `Json` | `json` package (SolarSharp extension) |
+
+## Restricting CLR Access
+
+Limit what C# types scripts can access:
+
+### Don't Register Types
+
+The simplest approach:
+
+```csharp
+// Don't do this for sandboxed scripts:
+// UserData.RegisterType<DangerousClass>();
+
+Script script = new Script(CoreModules.Preset_HardSandbox);
+// Scripts can't access DangerousClass
+```
+
+### Remove Dangerous Globals
+
+```csharp
+Script script = new Script();
+
+// Remove potentially dangerous functions
+script.Globals["require"] = LuaValue.Nil;
+script.Globals["dofile"] = LuaValue.Nil;
+script.Globals["loadfile"] = LuaValue.Nil;
+```
+
+### Provide Safe Wrappers
+
+```csharp
+Script script = new Script(CoreModules.Preset_HardSandbox);
+
+// Safe print that logs instead of Console.WriteLine
+script.Globals["print"] = (Action<string>)(msg => 
+{
+    Logger.Info($"Script output: {msg}");
+});
+
+// Safe file read with whitelist
+script.Globals["read_file"] = (Func<string, string>)(filename => 
+{
+    string[] whitelist = { "config.txt", "data.json" };
+    if (!whitelist.Contains(filename))
+        throw new SecurityException("File not allowed");
+    
+    return File.ReadAllText(filename);
+});
+```
+
+## Environment Isolation
+
+Give each script its own isolated environment:
+
+```csharp
+Script script = new Script(CoreModules.Preset_SoftSandbox);
+
+Table env1 = new Table(script);
+Table env2 = new Table(script);
+
+// Register modules in each environment
+env1.RegisterCoreModules(CoreModules.Preset_HardSandbox);
+env2.RegisterCoreModules(CoreModules.Preset_HardSandbox);
+
+// Run scripts in separate environments
+script.DoString("x = 10", env1);
+script.DoString("print(x)", env1);  -- prints 10
+script.DoString("print(x)", env2);  -- prints nil (isolated)
+```
+
+## Stream Redirection
+
+Redirect stdin/stdout/stderr to control I/O:
+
+```csharp
+Script script = new Script();
+
+// Redirect stdout to memory
+MemoryStream stdout = new MemoryStream();
+script.Options.Stdout = stdout;
+
+// Redirect stderr
+MemoryStream stderr = new MemoryStream();
+script.Options.Stderr = stderr;
+
+// Provide custom stdin
+string input = "user input\n";
+MemoryStream stdin = new MemoryStream(Encoding.UTF8.GetBytes(input));
+script.Options.Stdin = stdin;
+
+script.DoString("print('hello')");
+
+// Read captured output
+stdout.Seek(0, SeekOrigin.Begin);
+string output = new StreamReader(stdout).ReadToEnd();
+Console.WriteLine($"Captured: {output}");
+```
+
+## Timeout Execution
+
+Prevent infinite loops with timeouts:
+
+```csharp
+using System.Threading;
+
+Script script = new Script(CoreModules.Preset_HardSandbox);
+
+CancellationTokenSource cts = new CancellationTokenSource();
+cts.CancelAfter(TimeSpan.FromSeconds(5));  // 5 second timeout
+
+Task task = Task.Run(() =>
+{
+    try
+    {
+        script.DoString(@"
+            while true do
+                -- Infinite loop
+            end
+        ");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Script error: {ex.Message}");
+    }
+}, cts.Token);
+
+try
+{
+    task.Wait();
+}
+catch (AggregateException ex) when (ex.InnerException is TaskCanceledException)
+{
+    Console.WriteLine("Script execution timed out");
+}
+```
+
+<Note>
+SolarSharp doesn't have built-in instruction counting. Use OS-level timeouts or manual instrumentation.
+</Note>
+
+## Sandboxing Best Practices
+
+1. **Start restrictive**: Use `Preset_HardSandbox` by default
+2. **Whitelist, don't blacklist**: Only expose necessary functions
+3. **Validate inputs**: Sanitize all data from scripts
+4. **Limit resources**: Set timeouts and memory limits
+5. **Log activity**: Monitor what scripts are doing
+6. **Regular audits**: Review exposed functions periodically
+7. **Update dependencies**: Keep SolarSharp up to date
+
+## Example: Secure Plugin System
+
+```csharp
+public class PluginManager
+{
+    private readonly Script _script;
+    
+    public PluginManager()
+    {
+        // Create sandboxed environment
+        _script = new Script(CoreModules.Preset_HardSandbox);
+        
+        // Provide safe API
+        _script.Globals["api"] = new PluginAPI();
+        
+        // Redirect I/O
+        _script.Options.Stdout = new MemoryStream();
+        _script.Options.Stderr = new MemoryStream();
+    }
+    
+    public void LoadPlugin(string code)
+    {
+        // Timeout after 10 seconds
+        CancellationTokenSource cts = new CancellationTokenSource();
+        cts.CancelAfter(TimeSpan.FromSeconds(10));
+        
+        Task.Run(() => _script.DoString(code), cts.Token).Wait();
+    }
+}
+
+public class PluginAPI
+{
+    public void Log(string message)
+    {
+        // Safe logging
+        Console.WriteLine($"[Plugin] {message}");
+    }
+    
+    public string GetData(string key)
+    {
+        // Whitelist allowed keys
+        if (key != "allowed_key")
+            throw new SecurityException("Key not allowed");
+        
+        return "safe data";
+    }
+}
+```
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="ScriptOptions" icon="gear" href="/api/script-options">
+    Configure script behavior
+  </Card>
+  <Card title="Custom Modules" icon="puzzle-piece" href="/advanced/custom-modules">
+    Create safe custom modules
+  </Card>
+</CardGroup>

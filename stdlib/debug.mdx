@@ -1,0 +1,470 @@
+---
+title: Debug Module
+description: Debugging utilities in SolarSharp
+---
+
+The Debug module (`CoreModules.Debug`) provides introspection and debugging capabilities. Support is partial compared to standard Lua.
+
+<Warning>
+The debug module provides powerful introspection capabilities that can break encapsulation and security boundaries. Use with caution, especially in sandboxed environments.
+</Warning>
+
+## Interactive Debugging
+
+### debug.debug()
+
+Enters an interactive debug mode with a REPL.
+
+```lua
+function problematicFunction(x)
+    local result = x * 2
+    debug.debug()  -- Drop into debugger
+    return result
+end
+
+problematicFunction(5)
+```
+
+When `debug.debug()` is called, an interactive prompt appears where you can:
+- Inspect variables
+- Evaluate expressions
+- Continue execution (Ctrl+C or continue command)
+
+**Requirements:**
+- `Script.Options.DebugInput` must be configured
+- Platform must support interactive input
+
+**Example session:**
+```
+lua_debug> x
+5
+lua_debug> result
+10
+lua_debug> result * 2
+20
+lua_debug> cont
+```
+
+## Stack Tracing
+
+### debug.traceback([thread,] [message [, level]])
+
+Generates a stack traceback.
+
+```lua
+function a()
+    b()
+end
+
+function b()
+    c()
+end
+
+function c()
+    print(debug.traceback())
+end
+
+a()
+```
+
+**Output:**
+```
+stack traceback:
+	script.lua:10: in function 'c'
+	script.lua:6: in function 'b'
+	script.lua:2: in function 'a'
+	script.lua:13: in main chunk
+```
+
+**Parameters:**
+- `thread` - Optional coroutine to get traceback from
+- `message` - Optional message to prepend
+- `level` - Stack level to start from (default: 1)
+
+**With message:**
+```lua
+function errorHandler(err)
+    return debug.traceback("Error occurred: " .. tostring(err), 2)
+end
+
+xpcall(function()
+    error("Something went wrong")
+end, errorHandler)
+```
+
+## Metatable Access
+
+### debug.getmetatable(value)
+
+Returns the metatable of a value, bypassing `__metatable` protection.
+
+```lua
+local t = setmetatable({}, {
+    __metatable = "protected",
+    __index = function() return "secret" end
+})
+
+print(getmetatable(t))         -- "protected"
+print(debug.getmetatable(t))  -- table: 0x... (actual metatable)
+```
+
+**Difference from `getmetatable()`:**
+- `getmetatable()` returns `__metatable` field if set
+- `debug.getmetatable()` always returns the actual metatable
+
+### debug.setmetatable(value, table)
+
+Sets the metatable of a value, bypassing restrictions.
+
+```lua
+local t = setmetatable({}, {
+    __metatable = "protected"
+})
+
+-- This would error:
+-- setmetatable(t, newmeta)
+
+-- But this works:
+local newmeta = { __index = function() return "new" end }
+debug.setmetatable(t, newmeta)
+print(t.anything)  -- "new"
+```
+
+**Works on:**
+- Tables
+- Types with type metatables (strings, numbers, etc.)
+
+## Registry Access
+
+### debug.getregistry()
+
+Returns the Lua registry table.
+
+```lua
+local registry = debug.getregistry()
+
+-- Registry contains internal SolarSharp data
+for k, v in pairs(registry) do
+    print(k, type(v))
+end
+```
+
+**Warning:** The registry contains internal SolarSharp state. Modifying it can cause undefined behavior.
+
+## Upvalue Inspection
+
+Upvalues are variables from outer scopes captured by closures.
+
+### debug.getupvalue(func, index)
+
+Gets the name and value of an upvalue.
+
+```lua
+function makeCounter()
+    local count = 0
+    return function()
+        count = count + 1
+        return count
+    end
+end
+
+local counter = makeCounter()
+
+-- Inspect upvalue
+local name, value = debug.getupvalue(counter, 1)
+print(name)   -- "count"
+print(value)  -- 0
+
+counter()  -- Increment counter
+
+local name, value = debug.getupvalue(counter, 1)
+print(value)  -- 1
+```
+
+**Parameters:**
+- `func` - Function to inspect
+- `index` - Upvalue index (1-based)
+
+**Returns:**
+- Upvalue name
+- Upvalue value
+- `nil` if index is out of range or function is a CLR function
+
+### debug.setupvalue(func, index, value)
+
+Sets the value of an upvalue.
+
+```lua
+function makeCounter()
+    local count = 0
+    return function()
+        count = count + 1
+        return count
+    end
+end
+
+local counter = makeCounter()
+print(counter())  -- 1
+print(counter())  -- 2
+
+-- Reset counter
+debug.setupvalue(counter, 1, 0)
+print(counter())  -- 1 (reset)
+```
+
+**Returns:** Upvalue name, or `nil` if invalid
+
+### debug.upvalueid(func, index)
+
+Returns a unique identifier for an upvalue.
+
+```lua
+function outer()
+    local shared = 0
+    
+    local function a()
+        return shared
+    end
+    
+    local function b()
+        return shared
+    end
+    
+    return a, b
+end
+
+local a, b = outer()
+
+-- Check if functions share the same upvalue
+local id_a = debug.upvalueid(a, 1)
+local id_b = debug.upvalueid(b, 1)
+print(id_a == id_b)  -- true (same upvalue)
+```
+
+**Returns:** Unique identifier (number based on hash code)
+
+### debug.upvaluejoin(f1, n1, f2, n2)
+
+Makes two functions share the same upvalue.
+
+```lua
+function makeCounter()
+    local count = 0
+    return function()
+        count = count + 1
+        return count
+    end
+end
+
+local counter1 = makeCounter()
+local counter2 = makeCounter()
+
+print(counter1())  -- 1
+print(counter2())  -- 1 (separate counters)
+
+-- Make them share the same upvalue
+debug.upvaluejoin(counter2, 1, counter1, 1)
+
+print(counter1())  -- 2
+print(counter2())  -- 3 (now shared!)
+```
+
+**Parameters:**
+- `f1` - Target function
+- `n1` - Target upvalue index
+- `f2` - Source function
+- `n2` - Source upvalue index
+
+## UserData Access
+
+### debug.getuservalue(udata)
+
+Gets the user value associated with userdata.
+
+```lua
+-- Assuming you have a userdata object
+local uservalue = debug.getuservalue(myUserdata)
+if uservalue then
+    print("User value:", uservalue)
+else
+    print("No user value set")
+end
+```
+
+**Returns:** Associated table, or `nil`
+
+### debug.setuservalue(udata, table)
+
+Sets the user value for userdata.
+
+```lua
+-- Attach custom data to userdata
+local customData = { id = 123, name = "MyObject" }
+debug.setuservalue(myUserdata, customData)
+
+-- Later retrieve it
+local data = debug.getuservalue(myUserdata)
+print(data.name)  -- "MyObject"
+```
+
+**Parameters:**
+- `udata` - UserData object
+- `table` - Table to associate (or `nil` to clear)
+
+**Returns:** The table
+
+## Examples
+
+### Error Handler with Stack Trace
+
+```lua
+function errorHandler(err)
+    local trace = debug.traceback(tostring(err), 2)
+    print("Error occurred:")
+    print(trace)
+    return err
+end
+
+xpcall(function()
+    local function inner()
+        error("Something broke!")
+    end
+    inner()
+end, errorHandler)
+```
+
+### Inspect Closure State
+
+```lua
+function inspectClosure(func)
+    print("Upvalues:")
+    local i = 1
+    while true do
+        local name, value = debug.getupvalue(func, i)
+        if not name then break end
+        print(string.format("  [%d] %s = %s", i, name, tostring(value)))
+        i = i + 1
+    end
+end
+
+function makeStatefulFunction()
+    local state1 = "initial"
+    local state2 = 42
+    return function()
+        return state1, state2
+    end
+end
+
+local func = makeStatefulFunction()
+inspectClosure(func)
+-- Upvalues:
+--   [1] state1 = initial
+--   [2] state2 = 42
+```
+
+### Hot-Reload Function Upvalues
+
+```lua
+function reloadConfig(func, configTable)
+    -- Find the config upvalue and update it
+    local i = 1
+    while true do
+        local name, value = debug.getupvalue(func, i)
+        if not name then break end
+        
+        if name == "config" then
+            debug.setupvalue(func, i, configTable)
+            print("Config reloaded")
+            return true
+        end
+        i = i + 1
+    end
+    return false
+end
+```
+
+### Protected Call with Traceback
+
+```lua
+function pcall_trace(func, ...)
+    local function errorHandler(err)
+        return debug.traceback(tostring(err), 2)
+    end
+    
+    return xpcall(func, errorHandler, ...)
+end
+
+local ok, result = pcall_trace(function()
+    error("Test error")
+end)
+
+if not ok then
+    print(result)  -- Includes stack trace
+end
+```
+
+## Limitations
+
+SolarSharp's debug module has partial support compared to standard Lua:
+
+**Not Implemented:**
+- `debug.getinfo()` - Function/stack frame information
+- `debug.getlocal()` / `debug.setlocal()` - Local variable access
+- `debug.gethook()` / `debug.sethook()` - Execution hooks
+
+**Platform-Dependent:**
+- `debug.debug()` requires configured `DebugInput`
+
+**Differences:**
+- `debug.upvalueid()` returns number (hash code) instead of light userdata
+- CLR functions (C# callbacks) don't have accessible upvalues
+
+## C# Integration
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Modules;
+
+var script = new Script(CoreModules.Debug);
+
+// Configure debug input for debug.debug()
+script.Options.DebugInput = (prompt) => {
+    Console.Write(prompt);
+    return Console.ReadLine();
+};
+
+// The debug module is now available
+script.DoString(@"
+    function test()
+        debug.debug()  -- Interactive debugger
+    end
+");
+```
+
+## Security Considerations
+
+<Warning>
+The debug module can:
+- Bypass metatable protection
+- Inspect and modify private state
+- Access the registry
+- Break encapsulation
+
+**Never enable debug module for untrusted scripts!**
+</Warning>
+
+For sandboxing, use presets without debug:
+```csharp
+// Safe for untrusted code
+var script = new Script(CoreModules.Preset_HardSandbox);
+
+// Unsafe - includes debug module
+var script = new Script(CoreModules.Preset_Complete);
+```
+
+## See Also
+
+- [Error Handling](/guides/error-handling)
+- [Metatables](/core-concepts/tables#metatables)
+- [Coroutine Module](/stdlib/coroutine)
+- [Basic Functions](/stdlib/basic)

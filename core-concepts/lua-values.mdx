@@ -1,0 +1,446 @@
+---
+title: "Lua Values"
+description: "Understanding SolarSharp's LuaValue type system, DataType enum, and value conversion"
+---
+
+## Overview
+
+The `LuaValue` class is the core data type in SolarSharp, representing any value in Lua. It can hold different types of data including numbers, strings, booleans, tables, functions, and more.
+
+## The LuaValue Class
+
+`LuaValue` is a wrapper that can represent any Lua type:
+
+```csharp
+using SolarSharp.Interpreter.DataTypes;
+
+Script script = new Script();
+LuaValue result = script.DoString("return 42");
+
+Console.WriteLine(result.Type);   // DataType.Number
+Console.WriteLine(result.Number); // 42
+```
+
+## DataType Enum
+
+The `DataType` enum identifies what type of value a `LuaValue` contains:
+
+```csharp
+public enum DataType
+{
+    Nil,              // nil value
+    Void,             // no value (different from nil)
+    Boolean,          // true/false
+    Number,           // double-precision number
+    String,           // string
+    Function,         // Lua function
+    Table,            // Lua table
+    Tuple,            // Multiple return values
+    UserData,         // CLR object wrapper
+    Thread,           // Coroutine handle
+    ClrFunction,      // CLR callback function
+    TailCallRequest,  // Internal use
+    YieldRequest      // Internal use
+}
+```
+
+### Checking Types
+
+```csharp
+LuaValue value = script.DoString("return 'hello'");
+
+if (value.Type == DataType.String)
+{
+    Console.WriteLine($"String value: {value.String}");
+}
+
+// Helper methods
+if (value.IsNil())
+{
+    Console.WriteLine("Value is nil");
+}
+
+if (value.IsNotNil())
+{
+    Console.WriteLine("Value exists");
+}
+```
+
+## Creating LuaValues
+
+SolarSharp provides factory methods for creating `LuaValue` instances:
+
+### Basic Types
+
+```csharp
+// Nil
+LuaValue nil = LuaValue.Nil;
+LuaValue newNil = LuaValue.NewNil();
+
+// Boolean
+LuaValue trueVal = LuaValue.True;
+LuaValue falseVal = LuaValue.False;
+LuaValue customBool = LuaValue.NewBoolean(true);
+
+// Number
+LuaValue num = LuaValue.NewNumber(42.5);
+
+// String
+LuaValue str = LuaValue.NewString("Hello");
+LuaValue formatted = LuaValue.NewString("Value: {0}", 123);
+```
+
+### Complex Types
+
+```csharp
+// Table
+LuaValue table = LuaValue.NewTable(script);
+LuaValue array = LuaValue.NewTable(script, 
+    LuaValue.NewNumber(1),
+    LuaValue.NewNumber(2),
+    LuaValue.NewNumber(3)
+);
+
+// Callback function
+LuaValue callback = LuaValue.NewCallback(
+    (context, args) => LuaValue.NewString("Called!")
+);
+
+// Tuple (multiple return values)
+LuaValue tuple = LuaValue.NewTuple(
+    LuaValue.NewNumber(1),
+    LuaValue.NewString("two"),
+    LuaValue.True
+);
+```
+
+## Accessing Values
+
+Each `LuaValue` has type-specific properties:
+
+```csharp
+LuaValue value = script.DoString("return { x = 10, y = 20 }");
+
+switch (value.Type)
+{
+    case DataType.Nil:
+        // No accessible value
+        break;
+        
+    case DataType.Boolean:
+        bool b = value.Boolean;
+        break;
+        
+    case DataType.Number:
+        double n = value.Number;
+        break;
+        
+    case DataType.String:
+        string s = value.String;
+        break;
+        
+    case DataType.Table:
+        Table t = value.Table;
+        break;
+        
+    case DataType.Function:
+        Closure f = value.Function;
+        break;
+        
+    case DataType.ClrFunction:
+        CallbackFunction cb = value.Callback;
+        break;
+        
+    case DataType.Thread:
+        Coroutine co = value.Coroutine;
+        break;
+        
+    case DataType.Tuple:
+        LuaValue[] values = value.Tuple;
+        break;
+        
+    case DataType.UserData:
+        UserData ud = value.UserData;
+        break;
+}
+```
+
+<Warning>
+Accessing the wrong property for a type (e.g., `value.Number` when `Type` is `String`) will return default values or null. Always check the `Type` first.
+</Warning>
+
+## Type Conversion
+
+### To CLR Objects
+
+Convert `LuaValue` to C# types:
+
+```csharp
+LuaValue value = script.DoString("return 42");
+
+// Generic conversion
+object obj = value.ToObject();
+
+// Typed conversion
+int number = value.ToObject<int>();
+double d = value.ToObject<double>();
+string s = value.ToObject<string>();
+
+// Specific type conversion
+object specificType = value.ToObject(typeof(int));
+```
+
+### From CLR Objects
+
+Convert C# objects to `LuaValue`:
+
+```csharp
+Script script = new Script();
+
+// Automatic conversion
+LuaValue num = LuaValue.FromObject(script, 42);
+LuaValue str = LuaValue.FromObject(script, "hello");
+LuaValue list = LuaValue.FromObject(script, new[] { 1, 2, 3 });
+
+// Custom objects become UserData
+var myObject = new MyClass();
+LuaValue userData = LuaValue.FromObject(script, myObject);
+```
+
+### Type Coercion
+
+```csharp
+LuaValue value = LuaValue.NewNumber(42);
+
+// Cast to string (similar to Lua's behavior)
+string? str = value.CastToString(); // "42"
+
+// Cast string to number
+LuaValue strValue = LuaValue.NewString("3.14");
+double? num = strValue.CastToNumber(); // 3.14
+
+// Cast to boolean (false for nil/false, true for everything else)
+bool b = value.CastToBool(); // true
+```
+
+## Working with Tuples
+
+Tuples represent multiple return values from Lua:
+
+```csharp
+LuaValue result = script.DoString(@"
+    function multiple()
+        return 1, 'two', true
+    end
+    return multiple()
+");
+
+if (result.Type == DataType.Tuple)
+{
+    LuaValue[] values = result.Tuple;
+    Console.WriteLine(values[0].Number);  // 1
+    Console.WriteLine(values[1].String);  // "two"
+    Console.WriteLine(values[2].Boolean); // true
+}
+
+// Convert tuple to scalar (gets first value)
+LuaValue scalar = result.ToScalar();
+Console.WriteLine(scalar.Number); // 1
+```
+
+## Nil vs Void
+
+SolarSharp distinguishes between `Nil` and `Void`:
+
+- **Nil**: Lua's `nil` value, represents absence of a value
+- **Void**: Internal "no value" marker, used for functions with no return
+
+```csharp
+LuaValue nilVal = script.DoString("return nil");
+Console.WriteLine(nilVal.Type); // DataType.Nil
+
+LuaValue voidVal = script.DoString("-- no return");
+Console.WriteLine(voidVal.Type); // DataType.Void
+
+// Both are considered "empty"
+nilVal.IsNil();  // true
+voidVal.IsNil(); // true
+```
+
+## Type Validation
+
+Validate and convert types with error messages:
+
+```csharp
+using SolarSharp.Interpreter.Errors;
+
+LuaValue value = LuaValue.NewString("not a number");
+
+try
+{
+    // Will throw if not the expected type
+    value.CheckType("myFunction", DataType.Number, argNum: 1);
+}
+catch (ScriptRuntimeException ex)
+{
+    Console.WriteLine(ex.Message);
+    // "bad argument #1 to 'myFunction' (number expected, got string)"
+}
+
+// With auto-conversion
+LuaValue converted = value.CheckType(
+    "myFunction", 
+    DataType.Number, 
+    argNum: 1,
+    flags: TypeValidationFlags.AutoConvert
+);
+```
+
+### TypeValidationFlags
+
+```csharp
+[Flags]
+public enum TypeValidationFlags
+{
+    Default = 0,
+    AllowNil = 1,        // Accept nil values
+    AutoConvert = 2,     // Try to convert types
+}
+
+// Allow nil or number
+value.CheckType("func", DataType.Number, flags: TypeValidationFlags.AllowNil);
+
+// Auto-convert string to number if possible
+value.CheckType("func", DataType.Number, flags: TypeValidationFlags.AutoConvert);
+```
+
+## String Representation
+
+```csharp
+LuaValue value = LuaValue.NewNumber(42);
+
+// Standard string representation
+string str = value.ToString(); // "42"
+
+// Print string (for Lua print function)
+string printStr = value.ToPrintString();
+
+// Debug string (for debuggers)
+string debugStr = value.ToDebugPrintString();
+
+// Lua literal format
+LuaValue strVal = LuaValue.NewString("hello");
+string literal = strVal.ToLuaString(); // "\"hello\""
+```
+
+## Equality and Hashing
+
+```csharp
+LuaValue a = LuaValue.NewNumber(42);
+LuaValue b = LuaValue.NewNumber(42);
+LuaValue c = LuaValue.NewString("42");
+
+// Value equality
+bool equal = a.Equals(b); // true
+bool notEqual = a.Equals(c); // false (different types)
+
+// Can be used in dictionaries
+var dict = new Dictionary<LuaValue, string>();
+dict[a] = "forty-two";
+Console.WriteLine(dict[b]); // "forty-two"
+```
+
+## Length Operation
+
+Get the length of strings and tables:
+
+```csharp
+// String length
+LuaValue str = LuaValue.NewString("hello");
+LuaValue len = str.GetLength();
+Console.WriteLine(len.Number); // 5
+
+// Table length
+LuaValue table = script.DoString("return {1, 2, 3, 4}");
+LuaValue tableLen = table.GetLength();
+Console.WriteLine(tableLen.Number); // 4
+```
+
+## Assignment
+
+Modify a `LuaValue` in place:
+
+```csharp
+LuaValue value = LuaValue.NewNil();
+Console.WriteLine(value.Type); // DataType.Nil
+
+// Assign new value
+value.Assign(LuaValue.NewNumber(42));
+Console.WriteLine(value.Type); // DataType.Number
+Console.WriteLine(value.Number); // 42
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always check Type before accessing properties">
+    ```csharp
+    // Good
+    if (value.Type == DataType.Number)
+    {
+        double num = value.Number;
+    }
+    
+    // Risky - may return default value if wrong type
+    double num = value.Number;
+    ```
+  </Accordion>
+  
+  <Accordion title="Use static instances for common values">
+    ```csharp
+    // Efficient - reuses static instances
+    return LuaValue.Nil;
+    return LuaValue.True;
+    return LuaValue.False;
+    
+    // Less efficient - creates new instances
+    return LuaValue.NewNil();
+    return LuaValue.NewBoolean(true);
+    ```
+  </Accordion>
+  
+  <Accordion title="Handle Tuples appropriately">
+    ```csharp
+    LuaValue result = script.Call(function);
+    
+    // If expecting single value, convert to scalar
+    LuaValue single = result.ToScalar();
+    
+    // If expecting multiple values, check for tuple
+    if (result.Type == DataType.Tuple)
+    {
+        foreach (LuaValue val in result.Tuple)
+        {
+            // Process each value
+        }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Script Execution" href="/core-concepts/script-execution" icon="play">
+    Executing Lua scripts and getting results
+  </Card>
+  <Card title="Tables" href="/core-concepts/tables" icon="table">
+    Working with Lua tables
+  </Card>
+  <Card title="Functions" href="/core-concepts/functions" icon="function">
+    Calling functions and handling returns
+  </Card>
+  <Card title="Type Conversion" href="/interop/type-conversion" icon="arrows-rotate">
+    Converting between Lua and CLR types
+  </Card>
+</CardGroup>

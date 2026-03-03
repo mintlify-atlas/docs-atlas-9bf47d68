@@ -1,0 +1,487 @@
+---
+title: 'Creating Custom Modules'
+description: 'Extend SolarSharp by creating custom Lua modules in C#'
+---
+
+## Overview
+
+Custom modules expose C# functionality to Lua scripts as native-feeling Lua libraries.
+
+## Basic Module Structure
+
+A simple custom module:
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+
+public static class MyModule
+{
+    public static void Register(Script script, Table globalTable = null)
+    {
+        Table module = new Table(script);
+        globalTable = globalTable ?? script.Globals;
+        
+        // Add functions to module
+        module["hello"] = (Func<string>)(() => "Hello from C#!");
+        module["add"] = (Func<double, double, double>)((a, b) => a + b);
+        
+        // Register module globally
+        globalTable["mymodule"] = module;
+    }
+}
+
+// Usage
+Script script = new Script();
+MyModule.Register(script);
+
+script.DoString(@"
+    print(mymodule.hello())  -- Hello from C#!
+    print(mymodule.add(5, 3))  -- 8
+");
+```
+
+## Extension Method Pattern
+
+Create extension methods for cleaner registration:
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+
+public static class TableExtensions
+{
+    public static Table RegisterMyModule(this Table table)
+    {
+        Script script = table.OwnerScript;
+        Table module = new Table(script);
+        
+        module["version"] = "1.0.0";
+        module["square"] = (Func<double, double>)(x => x * x);
+        module["cube"] = (Func<double, double>)(x => x * x * x);
+        
+        table["mymodule"] = module;
+        return table;
+    }
+}
+
+// Usage
+Script script = new Script();
+script.Globals.RegisterMyModule();
+```
+
+## Module with State
+
+Modules can maintain internal state:
+
+```csharp
+public class CounterModule
+{
+    private int _counter = 0;
+    
+    public void Register(Script script)
+    {
+        Table module = new Table(script);
+        
+        module["increment"] = (Func<int>)(() => ++_counter);
+        module["decrement"] = (Func<int>)(() => --_counter);
+        module["get"] = (Func<int>)(() => _counter);
+        module["reset"] = (Action)(() => _counter = 0);
+        
+        script.Globals["counter"] = module;
+    }
+}
+
+// Usage
+Script script = new Script();
+CounterModule counter = new CounterModule();
+counter.Register(script);
+
+script.DoString(@"
+    counter.increment()
+    counter.increment()
+    print(counter.get())  -- 2
+    counter.reset()
+    print(counter.get())  -- 0
+");
+```
+
+## Using UserData for Complex Types
+
+Expose entire C# classes:
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+
+public class FileManager
+{
+    private string _basePath;
+    
+    public FileManager(string basePath)
+    {
+        _basePath = basePath;
+    }
+    
+    public string ReadFile(string filename)
+    {
+        string path = Path.Combine(_basePath, filename);
+        if (!File.Exists(path))
+            throw new FileNotFoundException($"File not found: {filename}");
+        return File.ReadAllText(path);
+    }
+    
+    public void WriteFile(string filename, string content)
+    {
+        string path = Path.Combine(_basePath, filename);
+        File.WriteAllText(path, content);
+    }
+    
+    public string[] ListFiles()
+    {
+        return Directory.GetFiles(_basePath)
+            .Select(Path.GetFileName)
+            .ToArray();
+    }
+}
+
+// Register and use
+Script script = new Script();
+
+// Register the type
+UserData.RegisterType<FileManager>();
+
+// Create instance
+FileManager fm = new FileManager("/path/to/files");
+script.Globals["files"] = UserData.Create(fm);
+
+script.DoString(@"
+    files:WriteFile('test.txt', 'Hello World')
+    local content = files:ReadFile('test.txt')
+    print(content)  -- Hello World
+    
+    local list = files:ListFiles()
+    for i, filename in ipairs(list) do
+        print(filename)
+    end
+");
+```
+
+## Variadic Functions
+
+Handle variable arguments:
+
+```csharp
+using SolarSharp.Interpreter.DataTypes;
+
+public static void RegisterMathModule(Script script)
+{
+    Table math = new Table(script);
+    
+    // Sum any number of arguments
+    math["sum"] = (Func<LuaValue[], double>)(args =>
+    {
+        double sum = 0;
+        foreach (var arg in args)
+        {
+            if (arg.Type == DataType.Number)
+                sum += arg.Number;
+        }
+        return sum;
+    });
+    
+    // Find maximum
+    math["max"] = (Func<LuaValue[], double>)(args =>
+    {
+        if (args.Length == 0)
+            throw new ArgumentException("Expected at least one argument");
+        
+        double max = double.MinValue;
+        foreach (var arg in args)
+        {
+            if (arg.Type == DataType.Number && arg.Number > max)
+                max = arg.Number;
+        }
+        return max;
+    });
+    
+    script.Globals["extramath"] = math;
+}
+
+// Usage
+Script script = new Script();
+RegisterMathModule(script);
+
+script.DoString(@"
+    print(extramath.sum(1, 2, 3, 4, 5))  -- 15
+    print(extramath.max(3, 7, 2, 9, 1))  -- 9
+");
+```
+
+## Accessing Execution Context
+
+Get the current script context:
+
+```csharp
+using SolarSharp.Interpreter.Execution;
+
+public static void RegisterDebugModule(Script script)
+{
+    Table module = new Table(script);
+    
+    module["info"] = (Func<ExecutionContext, string>)(context =>
+    {
+        return $"Script: {context.GetScript().SourceCodeCount} sources loaded";
+    });
+    
+    module["call_stack"] = (Action<ExecutionContext>)(context =>
+    {
+        var callStack = context.GetCallingLocation();
+        Console.WriteLine($"Called from: {callStack.FormatLocation(context.GetScript())}");
+    });
+    
+    script.Globals["mymodule"] = module;
+}
+```
+
+## Returning Multiple Values
+
+Return tuples to Lua:
+
+```csharp
+public static void RegisterTupleModule(Script script)
+{
+    Table module = new Table(script);
+    
+    // Return multiple values using DynValue.NewTuple
+    module["divmod"] = (Func<double, double, LuaValue>)((a, b) =>
+    {
+        double quotient = Math.Floor(a / b);
+        double remainder = a % b;
+        return LuaValue.NewTuple(
+            LuaValue.NewNumber(quotient),
+            LuaValue.NewNumber(remainder)
+        );
+    });
+    
+    script.Globals["tuples"] = module;
+}
+
+// Usage
+script.DoString(@"
+    local q, r = tuples.divmod(17, 5)
+    print(q, r)  -- 3  2
+");
+```
+
+## Error Handling
+
+Throw exceptions that Lua can catch:
+
+```csharp
+using SolarSharp.Interpreter.Errors;
+
+public static void RegisterValidationModule(Script script)
+{
+    Table module = new Table(script);
+    
+    module["validate_positive"] = (Action<double>)(value =>
+    {
+        if (value <= 0)
+            throw new ScriptRuntimeException("Value must be positive");
+    });
+    
+    script.Globals["validate"] = module;
+}
+
+// Lua can catch these with pcall
+script.DoString(@"
+    local ok, err = pcall(function()
+        validate.validate_positive(-5)
+    end)
+    
+    if not ok then
+        print('Error:', err)
+    end
+");
+```
+
+## Asynchronous Operations
+
+For long-running operations:
+
+```csharp
+using System.Threading.Tasks;
+
+public class AsyncModule
+{
+    public void Register(Script script)
+    {
+        Table module = new Table(script);
+        
+        module["fetch"] = (Func<string, string>)(url =>
+        {
+            // Synchronous wrapper for async operation
+            using HttpClient client = new HttpClient();
+            return client.GetStringAsync(url).Result;
+        });
+        
+        script.Globals["http"] = module;
+    }
+}
+```
+
+<Warning>
+Blocking async operations can cause performance issues. Consider using coroutines or callbacks.
+</Warning>
+
+## Complete Module Example
+
+A fully-featured JSON module:
+
+```csharp
+using System.Text.Json;
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+
+public static class JsonModule
+{
+    public static Table Register(Script script)
+    {
+        Table module = new Table(script);
+        
+        module["encode"] = (Func<Table, string>)(table =>
+        {
+            return TableToJson(table);
+        });
+        
+        module["decode"] = (Func<string, Table>)(json =>
+        {
+            var doc = JsonDocument.Parse(json);
+            return JsonToTable(script, doc.RootElement);
+        });
+        
+        module["pretty"] = (Func<Table, string>)(table =>
+        {
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            return TableToJson(table, options);
+        });
+        
+        script.Globals["json"] = module;
+        return module;
+    }
+    
+    private static string TableToJson(Table table, JsonSerializerOptions options = null)
+    {
+        // Convert Lua table to C# dictionary
+        var dict = new Dictionary<string, object>();
+        foreach (var pair in table.Pairs)
+        {
+            if (pair.Key.Type == DataType.String)
+            {
+                dict[pair.Key.String] = LuaValueToObject(pair.Value);
+            }
+        }
+        return JsonSerializer.Serialize(dict, options);
+    }
+    
+    private static Table JsonToTable(Script script, JsonElement element)
+    {
+        Table table = new Table(script);
+        
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in element.EnumerateObject())
+            {
+                table[prop.Name] = JsonElementToLuaValue(script, prop.Value);
+            }
+        }
+        
+        return table;
+    }
+    
+    private static object LuaValueToObject(LuaValue value)
+    {
+        return value.Type switch
+        {
+            DataType.Number => value.Number,
+            DataType.String => value.String,
+            DataType.Boolean => value.Boolean,
+            DataType.Nil => null,
+            DataType.Table => TableToDictionary(value.Table),
+            _ => value.ToString()
+        };
+    }
+    
+    private static LuaValue JsonElementToLuaValue(Script script, JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.Number => LuaValue.NewNumber(element.GetDouble()),
+            JsonValueKind.String => LuaValue.NewString(element.GetString()),
+            JsonValueKind.True => LuaValue.True,
+            JsonValueKind.False => LuaValue.False,
+            JsonValueKind.Null => LuaValue.Nil,
+            JsonValueKind.Object => JsonToTable(script, element),
+            JsonValueKind.Array => JsonArrayToTable(script, element),
+            _ => LuaValue.Nil
+        };
+    }
+    
+    private static Dictionary<string, object> TableToDictionary(Table table)
+    {
+        var dict = new Dictionary<string, object>();
+        foreach (var pair in table.Pairs)
+        {
+            if (pair.Key.Type == DataType.String)
+                dict[pair.Key.String] = LuaValueToObject(pair.Value);
+        }
+        return dict;
+    }
+    
+    private static Table JsonArrayToTable(Script script, JsonElement array)
+    {
+        Table table = new Table(script);
+        int index = 1;
+        foreach (var element in array.EnumerateArray())
+        {
+            table[index++] = JsonElementToLuaValue(script, element);
+        }
+        return table;
+    }
+}
+
+// Usage
+Script script = new Script();
+JsonModule.Register(script);
+
+script.DoString(@"
+    local data = { name = 'John', age = 30 }
+    local json_str = json.encode(data)
+    print(json_str)  -- {"name":"John","age":30}
+    
+    local decoded = json.decode(json_str)
+    print(decoded.name)  -- John
+");
+```
+
+## Module Best Practices
+
+1. **Namespace your modules**: Use unique names to avoid conflicts
+2. **Document functions**: Provide clear error messages
+3. **Validate inputs**: Check argument types and values
+4. **Handle errors gracefully**: Use try-catch and throw `ScriptRuntimeException`
+5. **Keep it simple**: Expose simple, Lua-friendly APIs
+6. **Test thoroughly**: Write unit tests for all functions
+7. **Consider performance**: Minimize allocations and copies
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="UserData" icon="database" href="/interop/overview">
+    Learn about CLR interop
+  </Card>
+  <Card title="Sandboxing" icon="shield" href="/advanced/sandboxing">
+    Secure custom modules
+  </Card>
+</CardGroup>

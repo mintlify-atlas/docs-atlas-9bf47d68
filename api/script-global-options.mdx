@@ -1,0 +1,317 @@
+---
+title: 'ScriptGlobalOptions'
+description: 'Global configuration options that apply to all Script instances'
+---
+
+The `ScriptGlobalOptions` class contains options that cannot be customized per-script and apply globally to all `Script` instances in the application.
+
+## Access
+
+Global options are accessed via the static property `Script.GlobalOptions`:
+
+```csharp
+Script.GlobalOptions.RethrowExceptionNested = true;
+```
+
+## Properties
+
+<ResponseField name="Platform" type="IPlatformAccessor">
+  Gets or sets the platform abstraction to use.
+  
+  This controls how SolarSharp interacts with the underlying platform for file I/O, environment detection, and other platform-specific operations.
+  
+  ```csharp
+  Script.GlobalOptions.Platform = new CustomPlatformAccessor();
+  ```
+</ResponseField>
+
+<ResponseField name="CustomConverters" type="CustomConvertersCollection">
+  Gets or sets the custom converters for CLR-to-Lua type conversions.
+  
+  Allows you to define custom conversion logic for specific types when passing objects between C# and Lua.
+  
+  ```csharp
+  Script.GlobalOptions.CustomConverters.SetClrToScriptCustomConversion<DateTime>(
+      (script, dt) => LuaValue.NewString(dt.ToString("O"))
+  );
+  ```
+</ResponseField>
+
+<ResponseField name="RethrowExceptionNested" type="bool">
+  Gets or sets whether interpreter exceptions should be re-thrown as nested exceptions.
+  
+  When true, exceptions from Lua are wrapped in an outer exception that preserves the CLR stack trace. When false, the original exception is thrown directly.
+  
+  ```csharp
+  Script.GlobalOptions.RethrowExceptionNested = true;
+  
+  try {
+      script.DoString("error('Something went wrong')");
+  } catch (Exception ex) {
+      // With RethrowExceptionNested = true, you get both
+      // the C# and Lua stack traces
+      Console.WriteLine(ex.ToString());
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="FuzzySymbolMatching" type="FuzzySymbolMatchingBehavior">
+  Gets or sets an enum that controls behavior when a symbol (method, property, userdata) is not found in a userdata's descriptor.
+  
+  For example, when set to `UpperFirstLetter` and Lua code calls `someuserdata.someMethod()`, SolarSharp will also try `someuserdata.SomeMethod()`.
+  
+  Flags can be combined:
+  - `None`: No fuzzy matching
+  - `UpperFirstLetter`: Try with first letter uppercase
+  - `Camelify`: Try converting snake_case to camelCase
+  - `PascalCase`: Try converting to PascalCase
+  
+  ```csharp
+  // Default behavior
+  Script.GlobalOptions.FuzzySymbolMatching = 
+      FuzzySymbolMatchingBehavior.Camelify | 
+      FuzzySymbolMatchingBehavior.UpperFirstLetter |
+      FuzzySymbolMatchingBehavior.PascalCase;
+  
+  // Disable fuzzy matching for strict behavior
+  Script.GlobalOptions.FuzzySymbolMatching = 
+      FuzzySymbolMatchingBehavior.None;
+  ```
+</ResponseField>
+
+## Example Usage
+
+### Custom Type Converters
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+using System;
+
+// Register custom converter for DateTime
+Script.GlobalOptions.CustomConverters.SetClrToScriptCustomConversion<DateTime>(
+    (script, dateTime) => {
+        var table = new Table(script);
+        table["year"] = dateTime.Year;
+        table["month"] = dateTime.Month;
+        table["day"] = dateTime.Day;
+        table["hour"] = dateTime.Hour;
+        table["minute"] = dateTime.Minute;
+        table["second"] = dateTime.Second;
+        return LuaValue.NewTable(table);
+    }
+);
+
+// Register custom converter from Lua to DateTime
+Script.GlobalOptions.CustomConverters.SetScriptToClrCustomConversion(
+    DataType.Table,
+    typeof(DateTime),
+    (luaValue) => {
+        var table = luaValue.Table;
+        return new DateTime(
+            (int)(table["year"] as double? ?? 2000),
+            (int)(table["month"] as double? ?? 1),
+            (int)(table["day"] as double? ?? 1),
+            (int)(table["hour"] as double? ?? 0),
+            (int)(table["minute"] as double? ?? 0),
+            (int)(table["second"] as double? ?? 0)
+        );
+    }
+);
+
+var script = new Script();
+script.Globals["now"] = DateTime.Now;
+
+script.DoString(@"
+    print(now.year, now.month, now.day)
+");
+```
+
+### Enhanced Error Handling
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Errors;
+using System;
+
+// Enable nested exceptions for better debugging
+Script.GlobalOptions.RethrowExceptionNested = true;
+
+var script = new Script();
+
+try
+{
+    script.DoString(@"
+        function level3()
+            error('Error at level 3')
+        end
+        
+        function level2()
+            level3()
+        end
+        
+        function level1()
+            level2()
+        end
+        
+        level1()
+    ");
+}
+catch (Exception ex)
+{
+    // With RethrowExceptionNested, you get full stack traces
+    Console.WriteLine("=== Full Exception Info ===");
+    Console.WriteLine(ex.ToString());
+    
+    // Access the inner ScriptRuntimeException
+    if (ex.InnerException is ScriptRuntimeException scriptEx)
+    {
+        Console.WriteLine("\n=== Lua Stack Trace ===");
+        Console.WriteLine(scriptEx.DecoratedMessage);
+    }
+}
+```
+
+### Fuzzy Symbol Matching
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Interop;
+using SolarSharp.Interpreter.DataTypes;
+
+public class MyClass
+{
+    public void DoSomething() { }
+    public int CalculateValue() { return 42; }
+    public string GetFormattedOutput() { return "output"; }
+}
+
+UserData.RegisterType<MyClass>();
+
+// Configure fuzzy matching
+Script.GlobalOptions.FuzzySymbolMatching = 
+    FuzzySymbolMatchingBehavior.UpperFirstLetter;
+
+var script = new Script();
+var obj = new MyClass();
+script.Globals["obj"] = obj;
+
+// Now Lua can use lowercase names
+script.DoString(@"
+    obj:doSomething()          -- Calls DoSomething()
+    local val = obj:calculateValue()  -- Calls CalculateValue()
+    print(val)
+");
+
+// Disable fuzzy matching for strict API
+Script.GlobalOptions.FuzzySymbolMatching = 
+    FuzzySymbolMatchingBehavior.None;
+
+try
+{
+    script.DoString("obj:doSomething()"); // Now fails
+}
+catch (ScriptRuntimeException ex)
+{
+    Console.WriteLine("Strict mode: method name must match exactly");
+}
+```
+
+### Custom Platform Accessor
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Platforms;
+
+public class CustomPlatform : PlatformAccessorBase
+{
+    public override string GetPlatformName()
+    {
+        return "Custom Platform";
+    }
+    
+    public override void DefaultPrint(string content)
+    {
+        // Custom print implementation
+        MyLogger.Log(content);
+    }
+    
+    // Override other methods as needed...
+}
+
+// Set globally before creating scripts
+Script.GlobalOptions.Platform = new CustomPlatform();
+
+var script = new Script();
+script.DoString("print('Hello')"); // Uses custom print
+```
+
+### Application-Wide Configuration
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Interop;
+
+// Configure at application startup
+public static class ScriptingEngine
+{
+    public static void Initialize()
+    {
+        // Enable nested exceptions for better error reporting
+        Script.GlobalOptions.RethrowExceptionNested = true;
+        
+        // Configure fuzzy matching for user-friendly Lua API
+        Script.GlobalOptions.FuzzySymbolMatching = 
+            FuzzySymbolMatchingBehavior.UpperFirstLetter |
+            FuzzySymbolMatchingBehavior.Camelify;
+        
+        // Register custom converters
+        RegisterCustomConverters();
+        
+        // Set default options for new scripts
+        Script.DefaultOptions.CheckThreadAccess = true;
+        Script.DefaultOptions.DebugPrint = s => Logger.Info($"[Lua] {s}");
+    }
+    
+    private static void RegisterCustomConverters()
+    {
+        // Register application-specific type converters
+        Script.GlobalOptions.CustomConverters.SetClrToScriptCustomConversion<Guid>(
+            (script, guid) => LuaValue.NewString(guid.ToString())
+        );
+    }
+}
+
+// Call at app startup
+ScriptingEngine.Initialize();
+
+// Now all scripts use these settings
+var script1 = new Script();
+var script2 = new Script();
+```
+
+## Important Notes
+
+1. **Global Scope**: Changes to `ScriptGlobalOptions` affect ALL scripts in the application, including existing ones.
+
+2. **Thread Safety**: Be careful when modifying global options from multiple threads. It's recommended to configure them once at application startup.
+
+3. **Custom Converters**: Custom converters are global and permanent once registered. Consider the impact on all scripts.
+
+4. **Platform Accessor**: Changing the platform accessor at runtime can have unpredictable effects. Set it once at startup.
+
+5. **Fuzzy Matching Performance**: Fuzzy symbol matching adds a small performance overhead when methods/properties are not found. Disable it for performance-critical scenarios where you control the naming.
+
+## Default Values
+
+When a `Script` is created, `ScriptGlobalOptions` has these defaults:
+
+```csharp
+// Default configuration
+Script.GlobalOptions.Platform = PlatformAutoDetector.GetDefaultPlatform();
+Script.GlobalOptions.RethrowExceptionNested = false;
+Script.GlobalOptions.FuzzySymbolMatching = 
+    FuzzySymbolMatchingBehavior.Camelify |
+    FuzzySymbolMatchingBehavior.UpperFirstLetter |
+    FuzzySymbolMatchingBehavior.PascalCase;
+```

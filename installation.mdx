@@ -1,0 +1,321 @@
+---
+title: "Installation"
+description: "Install SolarSharp via NuGet in your .NET project"
+---
+
+# Installation
+
+SolarSharp is distributed as a NuGet package and can be easily added to any .NET project. This guide covers installation for various project types and package managers.
+
+## NuGet Package
+
+The main SolarSharp package is:
+
+<Card title="SolarSharp.Interpreter" icon="box" href="https://www.nuget.org/packages/SolarSharp.Interpreter">
+  The core SolarSharp interpreter library
+</Card>
+
+## Installation Methods
+
+Choose your preferred package manager:
+
+<Tabs>
+  <Tab title=".NET CLI">
+    The .NET CLI is the recommended way to add packages in modern .NET projects:
+    
+    ```bash
+    dotnet add package SolarSharp.Interpreter
+    ```
+    
+    To install a specific version:
+    
+    ```bash
+    dotnet add package SolarSharp.Interpreter --version 2.0.0
+    ```
+  </Tab>
+  
+  <Tab title="Package Manager Console">
+    In Visual Studio, open the Package Manager Console (Tools > NuGet Package Manager > Package Manager Console) and run:
+    
+    ```powershell
+    Install-Package SolarSharp.Interpreter
+    ```
+    
+    To install a specific version:
+    
+    ```powershell
+    Install-Package SolarSharp.Interpreter -Version 2.0.0
+    ```
+  </Tab>
+  
+  <Tab title="PackageReference">
+    Add the following to your `.csproj` file inside an `<ItemGroup>`:
+    
+    ```xml
+    <PackageReference Include="SolarSharp.Interpreter" />
+    ```
+    
+    Or specify a version:
+    
+    ```xml
+    <PackageReference Include="SolarSharp.Interpreter" Version="2.0.0" />
+    ```
+    
+    Then restore packages:
+    
+    ```bash
+    dotnet restore
+    ```
+  </Tab>
+  
+  <Tab title="Visual Studio">
+    1. Right-click on your project in Solution Explorer
+    2. Select "Manage NuGet Packages..."
+    3. Click the "Browse" tab
+    4. Search for "SolarSharp.Interpreter"
+    5. Select the package and click "Install"
+  </Tab>
+</Tabs>
+
+## Platform Requirements
+
+SolarSharp supports multiple .NET target frameworks:
+
+<CardGroup cols={3}>
+  <Card title=".NET Standard 2.0" icon="circle-check">
+    Compatible with .NET Framework 4.6.1+
+  </Card>
+  
+  <Card title=".NET Standard 2.1" icon="circle-check">
+    Optimized for modern .NET features
+  </Card>
+  
+  <Card title=".NET 9.0+" icon="circle-check">
+    Latest .NET runtime support
+  </Card>
+</CardGroup>
+
+### Compatible Platforms
+
+SolarSharp works on a wide range of platforms:
+
+- **.NET Core** 2.0+ and **.NET** 5.0+
+- **.NET Framework** 4.6.1+
+- **Unity3D** (including IL2CPP)
+- **Xamarin.iOS** and **Xamarin.Android**
+- **Mono**
+- **UWP** (Universal Windows Platform)
+- **Ahead-of-time (AOT)** compilation platforms like iOS
+
+<Note>
+  No external dependencies are required. SolarSharp is self-contained and includes everything needed to run Lua scripts.
+</Note>
+
+## Dependencies
+
+SolarSharp has minimal dependencies that are automatically installed:
+
+<AccordionGroup>
+  <Accordion title="Core Dependencies" icon="box">
+    - `Microsoft.CodeAnalysis.CSharp` (4.14.0) - For dynamic code generation
+    - `System.Runtime.CompilerServices.Unsafe` (6.0.0) - For performance optimizations
+    - `Microsoft.Bcl.HashCode` (6.0.0) - For consistent hashing across platforms
+    - `Microsoft.Bcl.Memory` (9.0.7) - For memory management utilities
+  </Accordion>
+  
+  <Accordion title="Framework-Specific Dependencies" icon="layer-group">
+    For .NET Standard 2.0 and 2.1 targets:
+    - `Microsoft.CSharp` (4.7.0) - For dynamic language runtime support
+  </Accordion>
+</AccordionGroup>
+
+## Unity3D Installation
+
+For Unity projects, you have several options:
+
+<Steps>
+  <Step title="Option 1: Unity Package Manager (Recommended)">
+    Add the following to your `manifest.json` in the `Packages` folder:
+    
+    ```json
+    {
+      "dependencies": {
+        "com.solarsharp.interpreter": "2.0.0"
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Option 2: Download DLL">
+    1. Download the latest release from NuGet
+    2. Extract the `.nupkg` file (rename to `.zip` if needed)
+    3. Copy the DLL from `lib/netstandard2.0/` to your Unity `Assets/Plugins` folder
+  </Step>
+  
+  <Step title="Option 3: NuGet for Unity">
+    If you have NuGetForUnity installed:
+    
+    1. Open the NuGet window (Window > NuGet Package Manager)
+    2. Search for "SolarSharp.Interpreter"
+    3. Click Install
+  </Step>
+</Steps>
+
+<Warning>
+  When using IL2CPP in Unity, ensure you configure the link.xml file to prevent code stripping. See the Unity-specific documentation for details.
+</Warning>
+
+## Verify Installation
+
+After installation, verify that SolarSharp is working correctly:
+
+```csharp
+using System;
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+
+class Program
+{
+    static void Main()
+    {
+        // Create a simple script
+        LuaValue result = Script.RunString("return 'SolarSharp ' .. '2.0.0'");
+        
+        Console.WriteLine(result.String);
+        // Output: SolarSharp 2.0.0
+        
+        Console.WriteLine("Installation successful!");
+    }
+}
+```
+
+If this code compiles and runs without errors, SolarSharp is installed correctly.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Package restore fails" icon="triangle-exclamation">
+    Ensure you have an internet connection and that your NuGet sources are configured correctly:
+    
+    ```bash
+    dotnet nuget list source
+    ```
+    
+    The nuget.org source should be present. If not, add it:
+    
+    ```bash
+    dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget.org
+    ```
+  </Accordion>
+  
+  <Accordion title="Type or namespace not found" icon="triangle-exclamation">
+    Make sure you have the correct using directive:
+    
+    ```csharp
+    using SolarSharp.Interpreter;
+    using SolarSharp.Interpreter.DataTypes;
+    ```
+    
+    And verify the package is properly restored:
+    
+    ```bash
+    dotnet restore
+    ```
+  </Accordion>
+  
+  <Accordion title="Unity compilation errors" icon="triangle-exclamation">
+    If you encounter errors in Unity:
+    
+    1. Ensure you're using a compatible Unity version (.NET Standard 2.0+)
+    2. Check that the DLL is placed in the correct folder (Assets/Plugins)
+    3. Verify the DLL's import settings in the Unity Inspector
+    4. For IL2CPP, ensure you have a proper link.xml configuration
+  </Accordion>
+  
+  <Accordion title="Version conflicts" icon="triangle-exclamation">
+    If you have version conflicts with dependencies, you can force a specific version in your `.csproj`:
+    
+    ```xml
+    <ItemGroup>
+      <PackageReference Include="SolarSharp.Interpreter" Version="2.0.0" />
+      <PackageReference Include="Microsoft.Bcl.Memory" Version="9.0.7" />
+    </ItemGroup>
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Upgrading from MoonSharp
+
+If you're migrating from MoonSharp to SolarSharp:
+
+<Steps>
+  <Step title="Remove MoonSharp">
+    Uninstall the MoonSharp package:
+    
+    ```bash
+    dotnet remove package MoonSharp
+    ```
+  </Step>
+  
+  <Step title="Install SolarSharp">
+    Add the SolarSharp package:
+    
+    ```bash
+    dotnet add package SolarSharp.Interpreter
+    ```
+  </Step>
+  
+  <Step title="Update Namespaces">
+    Replace MoonSharp namespaces with SolarSharp:
+    
+    ```csharp
+    // Old
+    using MoonSharp.Interpreter;
+    
+    // New
+    using SolarSharp.Interpreter;
+    ```
+  </Step>
+  
+  <Step title="Test Your Code">
+    Most MoonSharp code should work without changes, but test thoroughly to ensure compatibility.
+  </Step>
+</Steps>
+
+<Tip>
+  SolarSharp maintains API compatibility with MoonSharp for most common use cases, making migration straightforward.
+</Tip>
+
+## Next Steps
+
+Now that you have SolarSharp installed:
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="bolt" href="/quickstart">
+    Run your first Lua script in under 5 minutes
+  </Card>
+  
+  <Card title="Core Concepts" icon="book-open" href="/core-concepts/script-execution">
+    Learn the fundamentals of SolarSharp
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/script">
+    Explore the complete API documentation
+  </Card>
+  
+  <Card title="Examples" icon="lightbulb" href="/quickstart">
+    Browse practical code examples
+  </Card>
+</CardGroup>
+
+## Getting Help
+
+If you encounter any issues during installation:
+
+- Check the [GitHub Issues](https://github.com/BraedonWooding/solarsharp/issues) for known problems
+- Review the [Contributing Guide](https://github.com/BraedonWooding/solarsharp/blob/main/Contributing.md)
+- Ask questions in the community forums
+
+<Note>
+  SolarSharp version 2.0.0.0 supports Lua 5.2. Check the version constant in the Script class for the exact versions.
+</Note>

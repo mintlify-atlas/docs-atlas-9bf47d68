@@ -1,0 +1,530 @@
+---
+title: 'CallbackArguments'
+description: 'Container class for arguments received by a CallbackFunction'
+---
+
+The `CallbackArguments` class is a container for arguments passed to a C# callback function from Lua. It provides convenient methods for accessing and validating arguments.
+
+## Properties
+
+<ResponseField name="Count" type="int">
+  Gets the count of arguments.
+  
+  ```csharp
+  script.Globals["func"] = new CallbackFunction((ctx, args) => {
+      Console.WriteLine($"Received {args.Count} arguments");
+      return LuaValue.Nil;
+  });
+  ```
+</ResponseField>
+
+<ResponseField name="IsMethodCall" type="bool">
+  Gets whether this is a method call (i.e., called with colon ':' operator in Lua).
+  
+  When true, the first argument is the 'self' object.
+  
+  ```csharp
+  script.Globals["obj"] = new CallbackFunction((ctx, args) => {
+      if (args.IsMethodCall) {
+          var self = args[0]; // The 'self' object
+          Console.WriteLine("Called as method");
+      }
+      return LuaValue.Nil;
+  });
+  
+  // Lua: obj:method()  -- IsMethodCall = true
+  // Lua: obj.method()  -- IsMethodCall = false
+  ```
+</ResponseField>
+
+## Indexer
+
+<ParamField path="this[int index]" type="indexer">
+  Gets the LuaValue at the specified index, or Void if not found.
+  
+  Indices are 0-based (unlike Lua's 1-based indexing).
+  
+  ```csharp
+  script.Globals["add"] = new CallbackFunction((ctx, args) => {
+      double a = args[0].Number;  // First argument
+      double b = args[1].Number;  // Second argument
+      return LuaValue.NewNumber(a + b);
+  });
+  ```
+</ParamField>
+
+## Access Methods
+
+<ParamField path="RawGet" type="method">
+  Gets the LuaValue at the specified index, or null if out of bounds.
+  
+  <Expandable title="parameters">
+    <ParamField path="index" type="int" required>
+      The 0-based index
+    </ParamField>
+    <ParamField path="translateVoids" type="bool" required>
+      If true, Void values are translated to Nil
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The value, or null if out of bounds
+  </ResponseField>
+  
+  ```csharp
+  LuaValue arg = args.RawGet(0, true);
+  if (arg == null) {
+      // Argument not provided
+  }
+  ```
+</ParamField>
+
+<ParamField path="GetArray" type="method">
+  Converts the arguments to an array.
+  
+  <Expandable title="parameters">
+    <ParamField path="skip" type="int">
+      The number of elements to skip (optional, default 0)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue[]">
+    Array of arguments
+  </ResponseField>
+  
+  ```csharp
+  script.Globals["print"] = new CallbackFunction((ctx, args) => {
+      LuaValue[] allArgs = args.GetArray();
+      foreach (var arg in allArgs) {
+          Console.Write(arg.ToPrintString() + "\t");
+      }
+      Console.WriteLine();
+      return LuaValue.Nil;
+  });
+  ```
+</ParamField>
+
+<ParamField path="SkipMethodCall" type="method">
+  Returns a copy of CallbackArguments where the first "self" argument is skipped if this was a method call.
+  
+  <ResponseField name="returns" type="CallbackArguments">
+    Arguments with 'self' removed (if method call), otherwise returns itself
+  </ResponseField>
+  
+  ```csharp
+  script.Globals["method"] = new CallbackFunction((ctx, args) => {
+      var actualArgs = args.SkipMethodCall();
+      // Now actualArgs[0] is the first real argument,
+      // not 'self'
+      return LuaValue.Nil;
+  });
+  ```
+</ParamField>
+
+## Type Validation Methods
+
+<ParamField path="AsType" type="method">
+  Gets the specified argument as a specific type, throwing an exception if conversion fails.
+  
+  <Expandable title="parameters">
+    <ParamField path="argNum" type="int" required>
+      The argument number (0-based)
+    </ParamField>
+    <ParamField path="funcName" type="string" required>
+      Function name for error messages
+    </ParamField>
+    <ParamField path="type" type="DataType" required>
+      The desired type
+    </ParamField>
+    <ParamField path="allowNil" type="bool">
+      Whether nil values are allowed (optional, default false)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The validated value
+  </ResponseField>
+  
+  ```csharp
+  script.Globals["process"] = new CallbackFunction((ctx, args) => {
+      var name = args.AsType(0, "process", DataType.String);
+      var age = args.AsType(1, "process", DataType.Number);
+      var optionalFlag = args.AsType(2, "process", DataType.Boolean, true);
+      
+      Console.WriteLine($"{name.String}, {age.Number}");
+      return LuaValue.Nil;
+  });
+  ```
+</ParamField>
+
+<ParamField path="AsInt" type="method">
+  Gets the specified argument as an integer, throwing if not a valid integer.
+  
+  <Expandable title="parameters">
+    <ParamField path="argNum" type="int" required>
+      The argument number (0-based)
+    </ParamField>
+    <ParamField path="funcName" type="string" required>
+      Function name for error messages
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="int">
+    The integer value
+  </ResponseField>
+  
+  ```csharp
+  script.Globals["repeat"] = new CallbackFunction((ctx, args) => {
+      int times = args.AsInt(0, "repeat");
+      string text = args[1].String;
+      
+      for (int i = 0; i < times; i++) {
+          Console.WriteLine(text);
+      }
+      return LuaValue.Nil;
+  });
+  ```
+</ParamField>
+
+<ParamField path="AsOptInt" type="method">
+  Gets the specified argument as an optional integer.
+  
+  <Expandable title="parameters">
+    <ParamField path="argNum" type="int" required>
+      The argument number (0-based)
+    </ParamField>
+    <ParamField path="funcName" type="string" required>
+      Function name for error messages
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="int?">
+    The integer value, or null if nil
+  </ResponseField>
+  
+  ```csharp
+  script.Globals["substring"] = new CallbackFunction((ctx, args) => {
+      string str = args[0].String;
+      int? start = args.AsOptInt(1, "substring");
+      int? length = args.AsOptInt(2, "substring");
+      
+      if (start.HasValue) {
+          str = str.Substring(start.Value, length ?? str.Length - start.Value);
+      }
+      
+      return LuaValue.NewString(str);
+  });
+  ```
+</ParamField>
+
+<ParamField path="AsOptBoolean" type="method">
+  Gets the specified argument as an optional boolean.
+  
+  <Expandable title="parameters">
+    <ParamField path="argNum" type="int" required>
+      The argument number (0-based)
+    </ParamField>
+    <ParamField path="funcName" type="string" required>
+      Function name for error messages
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="bool?">
+    The boolean value, or null if nil
+  </ResponseField>
+  
+  ```csharp
+  script.Globals["log"] = new CallbackFunction((ctx, args) => {
+      string message = args[0].String;
+      bool? verbose = args.AsOptBoolean(1, "log");
+      
+      if (verbose ?? false) {
+          Console.WriteLine($"[VERBOSE] {message}");
+      } else {
+          Console.WriteLine(message);
+      }
+      return LuaValue.Nil;
+  });
+  ```
+</ParamField>
+
+<ParamField path="AsUserData<T>" type="method">
+  Gets the specified argument as userdata of a specific CLR type.
+  
+  <Expandable title="parameters">
+    <ParamField path="argNum" type="int" required>
+      The argument number (0-based)
+    </ParamField>
+    <ParamField path="funcName" type="string" required>
+      Function name for error messages
+    </ParamField>
+    <ParamField path="allowNil" type="bool">
+      Whether nil values are allowed (optional, default false)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="T">
+    The unwrapped CLR object
+  </ResponseField>
+  
+  ```csharp
+  public class Player {
+      public string Name { get; set; }
+  }
+  
+  UserData.RegisterType<Player>();
+  
+  script.Globals["greetPlayer"] = new CallbackFunction((ctx, args) => {
+      Player player = args.AsUserData<Player>(0, "greetPlayer");
+      return LuaValue.NewString($"Hello, {player.Name}!");
+  });
+  ```
+</ParamField>
+
+<ParamField path="AsStringUsingMeta" type="method">
+  Gets the specified argument as a string, calling the __tostring metamethod if needed.
+  
+  <Expandable title="parameters">
+    <ParamField path="executionContext" type="ScriptExecutionContext" required>
+      The execution context
+    </ParamField>
+    <ParamField path="argNum" type="int" required>
+      The argument number (0-based)
+    </ParamField>
+    <ParamField path="funcName" type="string" required>
+      Function name for error messages
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="string">
+    The string representation
+  </ResponseField>
+  
+  ```csharp
+  script.Globals["print"] = new CallbackFunction((ctx, args) => {
+      for (int i = 0; i < args.Count; i++) {
+          string str = args.AsStringUsingMeta(ctx, i, "print");
+          Console.Write(str + "\t");
+      }
+      Console.WriteLine();
+      return LuaValue.Nil;
+  });
+  ```
+</ParamField>
+
+## Example Usage
+
+### Basic Argument Access
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+
+var script = new Script();
+
+script.Globals["add"] = new CallbackFunction((ctx, args) => {
+    // Check argument count
+    if (args.Count < 2) {
+        throw new ArgumentException("add requires 2 arguments");
+    }
+    
+    // Access arguments by index
+    double a = args[0].Number;
+    double b = args[1].Number;
+    
+    return LuaValue.NewNumber(a + b);
+}, "add");
+
+script.DoString("print(add(10, 20))"); // 30
+```
+
+### Type Validation
+
+```csharp
+script.Globals["formatUser"] = new CallbackFunction((ctx, args) => {
+    // Validate argument types
+    var name = args.AsType(0, "formatUser", DataType.String);
+    var age = args.AsType(1, "formatUser", DataType.Number);
+    var active = args.AsType(2, "formatUser", DataType.Boolean, allowNil: true);
+    
+    bool isActive = active.IsNil() ? true : active.Boolean;
+    
+    return LuaValue.NewString(
+        $"{name.String} ({age.Number}) - {(isActive ? "Active" : "Inactive")}"
+    );
+}, "formatUser");
+
+script.DoString(@"
+    print(formatUser('Alice', 30))           -- Alice (30) - Active
+    print(formatUser('Bob', 25, false))      -- Bob (25) - Inactive
+");
+```
+
+### Variadic Arguments
+
+```csharp
+script.Globals["sum"] = new CallbackFunction((ctx, args) => {
+    double total = 0;
+    
+    for (int i = 0; i < args.Count; i++) {
+        total += args[i].Number;
+    }
+    
+    return LuaValue.NewNumber(total);
+}, "sum");
+
+script.DoString(@"
+    print(sum(1, 2, 3, 4, 5))  -- 15
+    print(sum(10, 20))         -- 30
+");
+```
+
+### Method Call Handling
+
+```csharp
+public class GameObject {
+    public string Name { get; set; }
+    
+    public void SetName(string name) {
+        Name = name;
+    }
+}
+
+UserData.RegisterType<GameObject>();
+
+script.Globals["customMethod"] = new CallbackFunction((ctx, args) => {
+    if (args.IsMethodCall) {
+        var self = args.AsUserData<GameObject>(0, "customMethod");
+        var newName = args[1].String;
+        self.Name = newName;
+        Console.WriteLine($"Method call on {self.Name}");
+    } else {
+        Console.WriteLine("Function call (no self)");
+    }
+    return LuaValue.Nil;
+});
+
+var obj = new GameObject { Name = "Object1" };
+script.Globals["obj"] = obj;
+
+script.DoString(@"
+    obj:customMethod('NewName')   -- Method call
+    customMethod('Test')          -- Function call
+");
+```
+
+### Optional Arguments
+
+```csharp
+script.Globals["greet"] = new CallbackFunction((ctx, args) => {
+    string name = args[0].String;
+    
+    // Optional greeting prefix
+    string prefix = args.Count > 1 && args[1].IsNotNil() 
+        ? args[1].String 
+        : "Hello";
+    
+    return LuaValue.NewString($"{prefix}, {name}!");
+}, "greet");
+
+script.DoString(@"
+    print(greet('Alice'))              -- Hello, Alice!
+    print(greet('Bob', 'Hi'))          -- Hi, Bob!
+    print(greet('Charlie', 'Welcome')) -- Welcome, Charlie!
+");
+```
+
+### UserData Arguments
+
+```csharp
+public class Vector3 {
+    public double X, Y, Z;
+    
+    public Vector3(double x, double y, double z) {
+        X = x; Y = y; Z = z;
+    }
+}
+
+UserData.RegisterType<Vector3>();
+
+script.Globals["distance"] = new CallbackFunction((ctx, args) => {
+    var v1 = args.AsUserData<Vector3>(0, "distance");
+    var v2 = args.AsUserData<Vector3>(1, "distance");
+    
+    double dx = v2.X - v1.X;
+    double dy = v2.Y - v1.Y;
+    double dz = v2.Z - v1.Z;
+    
+    return LuaValue.NewNumber(Math.Sqrt(dx*dx + dy*dy + dz*dz));
+}, "distance");
+
+script.Globals["v1"] = new Vector3(0, 0, 0);
+script.Globals["v2"] = new Vector3(3, 4, 0);
+
+script.DoString("print(distance(v1, v2))"); // 5
+```
+
+### Converting to Array
+
+```csharp
+script.Globals["printAll"] = new CallbackFunction((ctx, args) => {
+    LuaValue[] allArgs = args.GetArray();
+    
+    Console.WriteLine($"Received {allArgs.Length} arguments:");
+    foreach (var arg in allArgs) {
+        Console.WriteLine($"  {arg.Type}: {arg}");
+    }
+    
+    return LuaValue.Nil;
+}, "printAll");
+
+script.DoString("printAll(1, 'two', true, {x=10})");
+```
+
+### Skipping Self in Method Calls
+
+```csharp
+script.Globals["instanceMethod"] = new CallbackFunction((ctx, args) => {
+    // Skip 'self' if method call
+    var actualArgs = args.SkipMethodCall();
+    
+    Console.WriteLine($"Processing {actualArgs.Count} arguments");
+    
+    for (int i = 0; i < actualArgs.Count; i++) {
+        Console.WriteLine($"  Arg {i}: {actualArgs[i]}");
+    }
+    
+    return LuaValue.Nil;
+});
+
+script.DoString(@"
+    local obj = {}
+    obj.method = instanceMethod
+    
+    obj:method(1, 2, 3)  -- Skips 'obj', processes 1,2,3
+    obj.method(1, 2, 3)  -- Doesn't skip, processes 1,2,3
+");
+```
+
+## Error Handling
+
+```csharp
+script.Globals["safeDivide"] = new CallbackFunction((ctx, args) => {
+    try {
+        double a = args.AsType(0, "safeDivide", DataType.Number).Number;
+        double b = args.AsType(1, "safeDivide", DataType.Number).Number;
+        
+        if (b == 0) {
+            throw new ScriptRuntimeException("Division by zero");
+        }
+        
+        return LuaValue.NewNumber(a / b);
+    } catch (ScriptRuntimeException) {
+        throw; // Rethrow Lua exceptions
+    } catch (Exception ex) {
+        throw new ScriptRuntimeException(
+            $"Error in safeDivide: {ex.Message}"
+        );
+    }
+}, "safeDivide");
+```

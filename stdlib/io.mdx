@@ -1,0 +1,476 @@
+---
+title: IO Module
+description: File input/output operations in SolarSharp
+---
+
+The IO module (`CoreModules.IO`) provides file input/output capabilities. Proper support requires a compatible `IPlatformAccessor` implementation.
+
+<Warning>
+The IO module is **not available in Unity** builds due to platform restrictions. It requires full file system access.
+</Warning>
+
+## Standard Streams
+
+SolarSharp provides access to standard input, output, and error streams:
+
+```lua
+io.stdin   -- Standard input stream
+io.stdout  -- Standard output stream
+io.stderr  -- Standard error stream
+```
+
+## File Operations
+
+### io.open(filename [, mode [, encoding]])
+
+Opens a file and returns a file handle.
+
+```lua
+-- Read mode (default)
+local file = io.open("data.txt", "r")
+if file then
+    local content = file:read("*a")
+    file:close()
+end
+
+-- Write mode
+local file = io.open("output.txt", "w")
+if file then
+    file:write("Hello, World!\n")
+    file:close()
+end
+
+-- Append mode
+local file = io.open("log.txt", "a")
+if file then
+    file:write("Log entry\n")
+    file:close()
+end
+```
+
+**Modes:**
+- `"r"` - Read (default)
+- `"w"` - Write (overwrites existing file)
+- `"a"` - Append
+- `"r+"` - Read and write
+- `"w+"` - Read and write (overwrites)
+- `"a+"` - Read and append
+- `"b"` - Binary mode (add to any mode, e.g., `"rb"`)
+- `"t"` - Text mode (default)
+
+**Encoding:**
+- `nil` - UTF-8 for text mode, binary for binary mode
+- `"binary"` - Binary encoding
+- Any .NET encoding name (e.g., `"utf-8"`, `"utf-16"`, `"ascii"`)
+
+**Returns:** File handle on success, or `nil` plus error message on failure
+
+```lua
+local file, err = io.open("nonexistent.txt", "r")
+if not file then
+    print("Error: " .. err)
+end
+```
+
+### io.close([file])
+
+Closes a file handle.
+
+```lua
+local file = io.open("data.txt", "r")
+io.close(file)
+
+-- Or using file method
+file:close()
+
+-- Close default output file
+io.close()
+```
+
+### io.tmpfile()
+
+Creates a temporary file.
+
+```lua
+local temp = io.tmpfile()
+temp:write("temporary data")
+temp:seek("set", 0)  -- Rewind to beginning
+local data = temp:read("*a")
+temp:close()
+```
+
+**Returns:** File handle opened in write mode
+
+### io.type(obj)
+
+Checks if an object is a file handle.
+
+```lua
+local file = io.open("test.txt", "r")
+print(io.type(file))       -- "file"
+file:close()
+print(io.type(file))       -- "closed file"
+print(io.type("string"))   -- nil
+```
+
+**Returns:** `"file"`, `"closed file"`, or `nil`
+
+## Default Files
+
+### io.input([file])
+
+Sets or gets the default input file.
+
+```lua
+-- Get current default input
+local current = io.input()
+
+-- Set default input to a file
+io.input("input.txt")
+
+-- Or set using a file handle
+local file = io.open("data.txt", "r")
+io.input(file)
+
+-- Now io.read() reads from the default input
+local line = io.read()
+```
+
+### io.output([file])
+
+Sets or gets the default output file.
+
+```lua
+-- Redirect output to file
+io.output("output.txt")
+io.write("This goes to output.txt\n")
+
+-- Restore stdout
+io.output(io.stdout)
+io.write("This goes to console\n")
+```
+
+## Reading
+
+### io.read(...)
+
+Reads from the default input file.
+
+```lua
+-- Read a line
+local line = io.read()
+
+-- Read a number
+local num = io.read("*n")
+
+-- Read entire file
+local content = io.read("*a")
+
+-- Read specific number of characters
+local chars = io.read(10)
+```
+
+**Formats:**
+- `"*n"` - Read a number
+- `"*a"` - Read entire file
+- `"*l"` or `"*L"` - Read a line (default)
+- number - Read that many characters
+
+### file:read(...)
+
+Reads from a specific file handle.
+
+```lua
+local file = io.open("data.txt", "r")
+
+-- Read line by line
+for line in file:lines() do
+    print(line)
+end
+
+-- Read entire file
+file:seek("set", 0)  -- Rewind
+local content = file:read("*a")
+
+file:close()
+```
+
+### io.lines(filename)
+
+Iterates over lines in a file.
+
+```lua
+-- Read file line by line without explicit open/close
+for line in io.lines("data.txt") do
+    print(line)
+end
+```
+
+**Returns:** Iterator function that returns each line
+
+**Note:** In SolarSharp, this reads all lines into memory first.
+
+### file:lines()
+
+Iterates over lines in an open file.
+
+```lua
+local file = io.open("data.txt", "r")
+for line in file:lines() do
+    print(line)
+end
+file:close()
+```
+
+## Writing
+
+### io.write(...)
+
+Writes to the default output file.
+
+```lua
+io.write("Hello", " ", "World", "\n")
+io.write(string.format("Number: %d\n", 42))
+```
+
+**Parameters:** Multiple values to write (converted to strings)
+
+### file:write(...)
+
+Writes to a specific file handle.
+
+```lua
+local file = io.open("output.txt", "w")
+file:write("Line 1\n")
+file:write("Line 2\n")
+file:close()
+```
+
+### io.flush()
+
+Flushes the default output file.
+
+```lua
+io.write("Buffered data")
+io.flush()  -- Ensure it's written immediately
+```
+
+### file:flush()
+
+Flushes a specific file handle.
+
+```lua
+local file = io.open("log.txt", "a")
+file:write("Important log entry\n")
+file:flush()  -- Ensure it's written to disk
+```
+
+## File Handle Methods
+
+File handles returned by `io.open()` have these methods:
+
+### file:read(...)
+
+Reads from the file (see [io.read](#ioread) for formats).
+
+### file:write(...)
+
+Writes to the file.
+
+### file:close()
+
+Closes the file.
+
+### file:flush()
+
+Flushes buffered data to disk.
+
+### file:seek([whence [, offset]])
+
+Sets or gets file position.
+
+```lua
+local file = io.open("data.txt", "r")
+
+-- Get current position
+local pos = file:seek()
+
+-- Seek to beginning
+file:seek("set", 0)
+
+-- Seek relative to current position
+file:seek("cur", 10)
+
+-- Seek to end
+file:seek("end", 0)
+
+file:close()
+```
+
+**Whence:**
+- `"set"` - From beginning of file
+- `"cur"` - From current position
+- `"end"` - From end of file
+
+**Returns:** New file position
+
+### file:lines()
+
+Returns an iterator for reading lines.
+
+## Examples
+
+### Read Entire File
+
+```lua
+function readFile(filename)
+    local file = io.open(filename, "r")
+    if not file then
+        return nil, "Could not open file"
+    end
+    
+    local content = file:read("*a")
+    file:close()
+    return content
+end
+
+local content, err = readFile("data.txt")
+if content then
+    print(content)
+else
+    print("Error: " .. err)
+end
+```
+
+### Write to File
+
+```lua
+function writeFile(filename, content)
+    local file = io.open(filename, "w")
+    if not file then
+        return false, "Could not open file"
+    end
+    
+    file:write(content)
+    file:close()
+    return true
+end
+
+local ok, err = writeFile("output.txt", "Hello, World!\n")
+if not ok then
+    print("Error: " .. err)
+end
+```
+
+### Append to File
+
+```lua
+function appendLog(filename, message)
+    local file = io.open(filename, "a")
+    if file then
+        file:write(os.date("%Y-%m-%d %H:%M:%S"), " - ", message, "\n")
+        file:close()
+    end
+end
+
+appendLog("app.log", "Application started")
+```
+
+### Process File Line by Line
+
+```lua
+function processFile(filename)
+    local lineCount = 0
+    local wordCount = 0
+    
+    for line in io.lines(filename) do
+        lineCount = lineCount + 1
+        for word in string.gmatch(line, "%S+") do
+            wordCount = wordCount + 1
+        end
+    end
+    
+    return lineCount, wordCount
+end
+
+local lines, words = processFile("document.txt")
+print(string.format("Lines: %d, Words: %d", lines, words))
+```
+
+### Copy File
+
+```lua
+function copyFile(source, dest)
+    local input = io.open(source, "rb")
+    if not input then
+        return false, "Cannot open source file"
+    end
+    
+    local output = io.open(dest, "wb")
+    if not output then
+        input:close()
+        return false, "Cannot create destination file"
+    end
+    
+    local content = input:read("*a")
+    output:write(content)
+    
+    input:close()
+    output:close()
+    return true
+end
+```
+
+### Read CSV File
+
+```lua
+function readCSV(filename)
+    local rows = {}
+    for line in io.lines(filename) do
+        local row = {}
+        for field in string.gmatch(line, '([^,]+)') do
+            table.insert(row, field)
+        end
+        table.insert(rows, row)
+    end
+    return rows
+end
+```
+
+## C# Configuration
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Modules;
+
+// Enable IO module
+var script = new Script(CoreModules.Preset_Default);
+
+// Configure custom streams
+script.Options.Stdin = myInputStream;
+script.Options.Stdout = myOutputStream;
+script.Options.Stderr = myErrorStream;
+```
+
+## Error Handling
+
+Most IO functions return `nil` plus an error message on failure:
+
+```lua
+local file, err = io.open("missing.txt", "r")
+if not file then
+    print("Error: " .. err)  -- "missing.txt: No such file or directory"
+end
+```
+
+## Platform Notes
+
+- **Windows**: Use `"rb"` and `"wb"` for binary files to avoid newline translation
+- **Unity**: IO module is not supported
+- **Sandboxing**: Consider security implications when enabling file access
+
+## See Also
+
+- [OS System Module](/stdlib/os#system-functions)
+- [String Module](/stdlib/string)
+- [Basic Functions](/stdlib/basic)

@@ -1,0 +1,471 @@
+---
+title: JSON Module
+description: JSON parsing and serialization in SolarSharp
+---
+
+The JSON module (`CoreModules.Json`) is a SolarSharp-specific extension that provides JSON parsing and serialization capabilities.
+
+<Note>
+This module is not part of standard Lua. It's a SolarSharp extension for convenient JSON interoperability with C#/.NET applications.
+</Note>
+
+## Functions
+
+### json.parse(str)
+
+Parses a JSON string into a Lua table.
+
+```lua
+local jsonStr = '{"name": "Alice", "age": 30, "active": true}'
+local data = json.parse(jsonStr)
+
+print(data.name)    -- "Alice"
+print(data.age)     -- 30
+print(data.active)  -- true
+```
+
+**Supported JSON types:**
+
+| JSON Type | Lua Type | Example |
+|-----------|----------|--------|
+| Object | table | `{"key": "value"}` |
+| Array | table (1-indexed) | `[1, 2, 3]` |
+| String | string | `"hello"` |
+| Number | number | `42`, `3.14` |
+| Boolean | boolean | `true`, `false` |
+| Null | special null value | `null` |
+
+**Examples:**
+
+```lua
+-- Object
+local obj = json.parse('{"x": 10, "y": 20}')
+print(obj.x, obj.y)  -- 10  20
+
+-- Array
+local arr = json.parse('[1, 2, 3, 4, 5]')
+for i, v in ipairs(arr) do
+    print(i, v)
+end
+
+-- Nested structures
+local nested = json.parse([[
+{
+    "user": {
+        "name": "Bob",
+        "tags": ["admin", "developer"]
+    }
+}
+]])
+print(nested.user.name)      -- "Bob"
+print(nested.user.tags[1])   -- "admin"
+
+-- Mixed types
+local mixed = json.parse([[
+{
+    "string": "hello",
+    "number": 42,
+    "float": 3.14,
+    "bool": true,
+    "null": null,
+    "array": [1, 2, 3],
+    "object": {"nested": "value"}
+}
+]])
+```
+
+**Errors:**
+Throws `ScriptRuntimeException` if JSON is malformed.
+
+```lua
+local ok, err = pcall(function()
+    json.parse('{invalid json}')
+end)
+if not ok then
+    print("Parse error:", err)
+end
+```
+
+### json.serialize(table)
+
+Serializes a Lua table to a JSON string.
+
+```lua
+local data = {
+    name = "Alice",
+    age = 30,
+    active = true,
+    tags = {"user", "premium"}
+}
+
+local jsonStr = json.serialize(data)
+print(jsonStr)
+-- {"name":"Alice","age":30,"active":true,"tags":["user","premium"]}
+```
+
+**Type conversions:**
+
+| Lua Type | JSON Type |
+|----------|----------|
+| table (sequence) | Array |
+| table (dict) | Object |
+| string | String |
+| number | Number |
+| boolean | Boolean |
+| nil / json.null() | null |
+
+**Array vs Object detection:**
+- Tables with consecutive integer keys starting from 1 → JSON arrays
+- Tables with string/mixed keys → JSON objects
+
+```lua
+-- Array
+local arr = {1, 2, 3}
+print(json.serialize(arr))  -- [1,2,3]
+
+-- Object
+local obj = {x = 10, y = 20}
+print(json.serialize(obj))  -- {"x":10,"y":20}
+
+-- Mixed (treated as object)
+local mixed = {1, 2, 3, name = "test"}
+print(json.serialize(mixed))  -- {"1":1,"2":2,"3":3,"name":"test"}
+```
+
+**Errors:**
+Throws `ScriptRuntimeException` if table contains non-serializable values.
+
+### json.null()
+
+Creates a JSON null value.
+
+```lua
+local data = {
+    name = "Alice",
+    middleName = json.null(),  -- Explicit null
+    age = 30
+}
+
+local jsonStr = json.serialize(data)
+print(jsonStr)  -- {"name":"Alice","middleName":null,"age":30}
+```
+
+**Why needed:**
+Lua uses `nil` to represent absence, but JSON distinguishes between missing fields and `null` values.
+
+```lua
+local t1 = { name = "Alice" }              -- Missing field
+local t2 = { name = "Alice", age = nil }    -- Still missing (nil is omitted)
+local t3 = { name = "Alice", age = json.null() }  -- Explicit null
+
+print(json.serialize(t1))  -- {"name":"Alice"}
+print(json.serialize(t2))  -- {"name":"Alice"}
+print(json.serialize(t3))  -- {"name":"Alice","age":null}
+```
+
+### json.isnull(value)
+
+Checks if a value is JSON null.
+
+```lua
+local data = json.parse('{"name": "Alice", "age": null}')
+
+if json.isnull(data.age) then
+    print("Age is null")
+end
+
+-- Also returns true for Lua nil
+if json.isnull(nil) then
+    print("nil is also considered null")
+end
+```
+
+**Returns:** `true` if value is JSON null or Lua `nil`, `false` otherwise
+
+## Examples
+
+### Load Configuration
+
+```lua
+function loadConfig(filename)
+    local file = io.open(filename, "r")
+    if not file then
+        return nil, "Could not open file"
+    end
+    
+    local content = file:read("*a")
+    file:close()
+    
+    local ok, config = pcall(json.parse, content)
+    if not ok then
+        return nil, "Invalid JSON: " .. config
+    end
+    
+    return config
+end
+
+local config, err = loadConfig("config.json")
+if config then
+    print("Server:", config.server.host)
+    print("Port:", config.server.port)
+else
+    print("Error:", err)
+end
+```
+
+### Save Data
+
+```lua
+function saveData(filename, data)
+    local jsonStr = json.serialize(data)
+    
+    local file = io.open(filename, "w")
+    if not file then
+        return false, "Could not open file"
+    end
+    
+    file:write(jsonStr)
+    file:close()
+    return true
+end
+
+local gameState = {
+    player = {
+        name = "Player1",
+        level = 5,
+        position = {x = 100, y = 200}
+    },
+    inventory = {"sword", "potion", "key"},
+    questsCompleted = {"intro", "tutorial"}
+}
+
+saveData("save.json", gameState)
+```
+
+### API Communication
+
+```lua
+function apiRequest(endpoint, data)
+    -- Serialize request
+    local requestBody = json.serialize(data)
+    
+    -- Make HTTP request (pseudo-code)
+    local response = http.post(endpoint, requestBody)
+    
+    -- Parse response
+    return json.parse(response.body)
+end
+
+local result = apiRequest("https://api.example.com/users", {
+    name = "Alice",
+    email = "alice@example.com"
+})
+
+print("User ID:", result.id)
+print("Created:", result.createdAt)
+```
+
+### Deep Copy with JSON
+
+```lua
+function deepCopy(obj)
+    local jsonStr = json.serialize(obj)
+    return json.parse(jsonStr)
+end
+
+local original = {
+    name = "Alice",
+    scores = {10, 20, 30}
+}
+
+local copy = deepCopy(original)
+copy.name = "Bob"
+copy.scores[1] = 99
+
+print(original.name)       -- "Alice" (unchanged)
+print(original.scores[1])  -- 10 (unchanged)
+print(copy.name)           -- "Bob"
+print(copy.scores[1])      -- 99
+```
+
+**Warning:** This only works for JSON-serializable data. Functions, metatables, and userdata will be lost.
+
+### Pretty Print Table
+
+```lua
+function prettyPrint(data)
+    -- SolarSharp's json.serialize doesn't have formatting options,
+    -- but you can post-process the output
+    local jsonStr = json.serialize(data)
+    
+    -- Simple indentation (basic implementation)
+    local indent = 0
+    local result = ""
+    
+    for i = 1, #jsonStr do
+        local char = jsonStr:sub(i, i)
+        
+        if char == "{" or char == "[" then
+            result = result .. char .. "\n" .. string.rep("  ", indent + 1)
+            indent = indent + 1
+        elseif char == "}" or char == "]" then
+            indent = indent - 1
+            result = result .. "\n" .. string.rep("  ", indent) .. char
+        elseif char == "," then
+            result = result .. char .. "\n" .. string.rep("  ", indent)
+        else
+            result = result .. char
+        end
+    end
+    
+    return result
+end
+```
+
+### Validate JSON Schema
+
+```lua
+function validateUser(data)
+    if type(data.name) ~= "string" then
+        return false, "name must be a string"
+    end
+    
+    if type(data.age) ~= "number" or data.age < 0 then
+        return false, "age must be a positive number"
+    end
+    
+    if data.email and type(data.email) ~= "string" then
+        return false, "email must be a string"
+    end
+    
+    return true
+end
+
+local jsonStr = '{"name": "Alice", "age": 30}'
+local data = json.parse(jsonStr)
+
+local valid, err = validateUser(data)
+if valid then
+    print("Valid user data")
+else
+    print("Validation error:", err)
+end
+```
+
+### Handle Null Values
+
+```lua
+local jsonStr = [[
+{
+    "name": "Alice",
+    "email": null,
+    "phone": "555-1234"
+}
+]]
+
+local data = json.parse(jsonStr)
+
+-- Check for null
+if json.isnull(data.email) then
+    print("Email not provided")
+    data.email = "default@example.com"  -- Set default
+end
+
+print(data.email)  -- "default@example.com"
+```
+
+## C# Interoperability
+
+The JSON module is particularly useful for passing data between C# and Lua:
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Modules;
+using System.Text.Json;
+
+var script = new Script(CoreModules.Json);
+
+// Pass JSON from C# to Lua
+var jsonData = JsonSerializer.Serialize(new { name = "Alice", age = 30 });
+script.Globals["jsonData"] = jsonData;
+
+script.DoString(@"
+    local data = json.parse(jsonData)
+    print('Name:', data.name)
+    print('Age:', data.age)
+");
+
+// Get JSON from Lua to C#
+script.DoString(@"
+    result = json.serialize({
+        status = 'success',
+        value = 42
+    })
+");
+
+var resultJson = script.Globals.Get("result").String;
+var resultObj = JsonSerializer.Deserialize<Dictionary<string, object>>(resultJson);
+```
+
+## Limitations
+
+1. **No formatting options** - `json.serialize()` produces compact JSON without indentation
+
+2. **Circular references** - Will cause infinite loops:
+   ```lua
+   local t = {}
+   t.self = t
+   json.serialize(t)  -- ERROR: Stack overflow
+   ```
+
+3. **Functions and metatables** - Not serializable:
+   ```lua
+   local t = {
+       func = function() end,  -- Lost
+       data = "preserved"
+   }
+   setmetatable(t, { __index = {} })  -- Metatable lost
+   ```
+
+4. **Number precision** - Limited to JSON number precision (IEEE 754 double)
+
+5. **Array detection** - Tables with gaps are serialized as objects:
+   ```lua
+   local t = {[1] = "a", [3] = "c"}  -- Gap at index 2
+   json.serialize(t)  -- Object, not array
+   ```
+
+## Best Practices
+
+1. **Always use pcall for parsing untrusted JSON**
+   ```lua
+   local ok, data = pcall(json.parse, untrustedInput)
+   if not ok then
+       print("Invalid JSON")
+   end
+   ```
+
+2. **Use json.null() for explicit nulls**
+   ```lua
+   local data = { value = json.null() }  -- Not nil
+   ```
+
+3. **Validate data after parsing**
+   ```lua
+   local data = json.parse(input)
+   assert(type(data.name) == "string", "Invalid name")
+   ```
+
+4. **Avoid circular references**
+   ```lua
+   -- Don't do this:
+   local t = {}
+   t.self = t
+   ```
+
+## See Also
+
+- [IO Module](/stdlib/io) - File reading/writing
+- [String Module](/stdlib/string) - String manipulation
+- [Table Module](/stdlib/table) - Table operations
+- [Basic Functions](/stdlib/basic) - Type checking

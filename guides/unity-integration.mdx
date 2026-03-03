@@ -1,0 +1,269 @@
+---
+title: Unity3D Integration
+description: Learn how to integrate SolarSharp with Unity3D and configure IL2CPP support
+---
+
+SolarSharp provides comprehensive support for Unity3D, including compatibility with IL2CPP and ahead-of-time (AOT) compilation platforms.
+
+## Unity3D Support
+
+SolarSharp is designed to work seamlessly with Unity3D:
+
+- Full compatibility with Unity3D runtime
+- Runs on Ahead-of-time platforms like iOS
+- Runs on IL2CPP converted code
+- No external dependencies
+- Easy and performant interop with Unity objects
+
+## Setting Up SolarSharp in Unity
+
+### Basic Installation
+
+1. Add the SolarSharp assembly to your Unity project
+2. Ensure you're using .NET Standard 2.1 or higher
+3. Import the namespace in your scripts:
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+```
+
+### Basic Usage
+
+Here's a simple example of using SolarSharp in Unity:
+
+```csharp
+using UnityEngine;
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+
+public class LuaController : MonoBehaviour
+{
+    private Script script;
+
+    void Start()
+    {
+        // Initialize the Lua script
+        script = new Script();
+        
+        // Run Lua code
+        script.DoString(@"
+            function greet(name)
+                return 'Hello, ' .. name .. '!'
+            end
+        ");
+        
+        // Call Lua function from C#
+        LuaValue result = script.Call(script.Globals["greet"], "Unity");
+        Debug.Log(result.String); // Output: Hello, Unity!
+    }
+}
+```
+
+## IL2CPP Configuration
+
+### What is IL2CPP?
+
+IL2CPP is Unity's ahead-of-time (AOT) compilation technology that converts .NET code to C++ for better performance and broader platform support.
+
+### Platform Detection
+
+SolarSharp automatically detects when running on IL2CPP:
+
+```csharp
+using SolarSharp.Interpreter.Platforms;
+
+// Check if running on Unity
+if (PlatformAutoDetector.IsRunningOnUnity)
+{
+    Debug.Log("Running on Unity!");
+}
+
+// Check if using IL2CPP
+if (PlatformAutoDetector.IsUnityIL2CPP)
+{
+    Debug.Log("Using IL2CPP compilation!");
+}
+
+// Check if running on AOT platform
+if (PlatformAutoDetector.IsRunningOnAOT)
+{
+    Debug.Log("Running on AOT platform!");
+}
+```
+
+### InteropAccessMode for IL2CPP
+
+When using IL2CPP, you may need to configure the interop access mode:
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Interop;
+
+// For IL2CPP, use Reflection mode
+Script script = new Script();
+UserData.DefaultAccessMode = InteropAccessMode.Reflection;
+```
+
+## Loading Scripts from Unity Assets
+
+SolarSharp provides a special script loader for Unity assets:
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Loaders;
+
+public class ScriptManager : MonoBehaviour
+{
+    void Start()
+    {
+        // Create script with Unity asset loader
+        Script script = new Script();
+        
+        // Set up the Unity assets script loader
+        // Scripts should be in Resources/LuaScripts/ folder as .txt files
+        script.Options.ScriptLoader = new UnityAssetsScriptLoader("LuaScripts");
+        
+        // Load and execute script from Resources
+        script.DoFile("myscript");
+    }
+}
+```
+
+### Asset Organization
+
+1. Create a `Resources` folder in your Unity project
+2. Create a subfolder for your Lua scripts (e.g., `LuaScripts`)
+3. Add your Lua scripts as `.txt` files
+4. The loader will automatically find and load them
+
+## Coroutines Integration
+
+SolarSharp coroutines can be converted to Unity coroutines:
+
+```csharp
+using System.Collections;
+using UnityEngine;
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+
+public class CoroutineExample : MonoBehaviour
+{
+    void Start()
+    {
+        Script script = new Script();
+        
+        script.DoString(@"
+            function myCoroutine()
+                for i = 1, 5 do
+                    coroutine.yield(i)
+                end
+            end
+            
+            co = coroutine.create(myCoroutine)
+        ");
+        
+        LuaValue co = script.Globals["co"];
+        LuaValue fn = script.Globals["myCoroutine"];
+        
+        // Convert to Unity coroutine
+        StartCoroutine(co.Function.GetCoroutine().AsUnityCoroutine());
+    }
+}
+```
+
+## Module Configuration for Unity
+
+Some modules may not be available or needed in Unity:
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Modules;
+
+public class SafeScriptInit : MonoBehaviour
+{
+    void Start()
+    {
+        // Preset that excludes OS and IO modules (good for Unity)
+        Script script = new Script(CoreModules.Preset_SoftSandbox);
+        
+        // Or customize modules
+        CoreModules modules = CoreModules.Preset_Default 
+            & ~CoreModules.OS_System  // Remove system operations
+            & ~CoreModules.IO;         // Remove file I/O
+        
+        Script customScript = new Script(modules);
+    }
+}
+```
+
+## Best Practices
+
+### Performance
+
+- Cache `Script` instances rather than creating new ones frequently
+- Reuse `LuaFunction` references for frequently called functions
+- Consider using `Script.Call()` instead of dynamic invocation
+
+### Memory Management
+
+```csharp
+void OnDestroy()
+{
+    // Clean up when GameObject is destroyed
+    if (script != null)
+    {
+        script = null;
+    }
+}
+```
+
+### Error Handling
+
+Always wrap Lua calls in try-catch blocks:
+
+```csharp
+using SolarSharp.Interpreter.Errors;
+
+try
+{
+    script.DoString(luaCode);
+}
+catch (ScriptRuntimeException ex)
+{
+    Debug.LogError($"Lua runtime error: {ex.DecoratedMessage}");
+}
+catch (SyntaxErrorException ex)
+{
+    Debug.LogError($"Lua syntax error: {ex.DecoratedMessage}");
+}
+```
+
+## Platform-Specific Considerations
+
+### iOS / IL2CPP
+
+- Ensure all Unity types you want to expose to Lua are properly registered
+- Use `InteropAccessMode.Reflection` for better compatibility
+- Test thoroughly on the target platform
+
+### WebGL
+
+- SolarSharp works on WebGL builds
+- File system access is limited
+- Use `UnityAssetsScriptLoader` for script loading
+
+## Debugging in Unity
+
+Enable debug output:
+
+```csharp
+Script script = new Script();
+script.Options.DebugPrint = (s) => Debug.Log(s);
+```
+
+## Next Steps
+
+- Learn about [Error Handling](/guides/error-handling) patterns
+- Explore the [API Reference](/api/script) for more details
+- Check out [REPL Usage](/guides/repl) for interactive development

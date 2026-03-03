@@ -1,0 +1,402 @@
+---
+title: 'LuaValue'
+description: 'A class representing a value in a Lua/SolarSharp script'
+---
+
+The `LuaValue` class represents any value in Lua, including nil, booleans, numbers, strings, tables, functions, and userdata.
+
+## Properties
+
+<ResponseField name="Type" type="DataType">
+  Gets the type of the value (Nil, Boolean, Number, String, Function, Table, UserData, Thread, etc.)
+  
+  ```csharp
+  if (value.Type == DataType.Number) {
+      Console.WriteLine(value.Number);
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="Number" type="double">
+  Gets the numeric value. Valid only if Type is DataType.Number.
+  
+  ```csharp
+  LuaValue num = LuaValue.NewNumber(42.5);
+  double d = num.Number; // 42.5
+  ```
+</ResponseField>
+
+<ResponseField name="String" type="string">
+  Gets the string value. Valid only if Type is DataType.String.
+  
+  ```csharp
+  LuaValue str = LuaValue.NewString("Hello");
+  string s = str.String; // "Hello"
+  ```
+</ResponseField>
+
+<ResponseField name="Boolean" type="bool">
+  Gets the boolean value. Valid only if Type is DataType.Boolean.
+  
+  ```csharp
+  LuaValue val = LuaValue.True;
+  bool b = val.Boolean; // true
+  ```
+</ResponseField>
+
+<ResponseField name="Table" type="Table">
+  Gets the table. Valid only if Type is DataType.Table.
+  
+  ```csharp
+  LuaValue tbl = script.Globals;
+  Table t = tbl.Table;
+  ```
+</ResponseField>
+
+<ResponseField name="Function" type="Closure">
+  Gets the function (closure). Valid only if Type is DataType.Function.
+</ResponseField>
+
+<ResponseField name="Callback" type="CallbackFunction">
+  Gets the CLR callback. Valid only if Type is DataType.ClrFunction.
+</ResponseField>
+
+<ResponseField name="Coroutine" type="Coroutine">
+  Gets the coroutine handle. Valid only if Type is DataType.Thread.
+</ResponseField>
+
+<ResponseField name="UserData" type="UserData">
+  Gets the userdata. Valid only if Type is DataType.UserData.
+</ResponseField>
+
+<ResponseField name="Tuple" type="LuaValue[]">
+  Gets the values in the tuple. Valid only if Type is DataType.Tuple.
+</ResponseField>
+
+## Static Instances
+
+<ResponseField name="Nil" type="LuaValue" static>
+  A preinitialized, readonly instance representing nil.
+  
+  ```csharp
+  return LuaValue.Nil;
+  ```
+</ResponseField>
+
+<ResponseField name="Void" type="LuaValue" static>
+  A preinitialized, readonly instance representing void (no value).
+</ResponseField>
+
+<ResponseField name="True" type="LuaValue" static>
+  A preinitialized, readonly instance representing true.
+</ResponseField>
+
+<ResponseField name="False" type="LuaValue" static>
+  A preinitialized, readonly instance representing false.
+</ResponseField>
+
+## Factory Methods
+
+<ParamField path="NewNumber" type="method" static>
+  Creates a new LuaValue initialized to the specified number.
+  
+  <Expandable title="parameters">
+    <ParamField path="num" type="double" required>
+      The numeric value
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  LuaValue val = LuaValue.NewNumber(3.14);
+  ```
+</ParamField>
+
+<ParamField path="NewString" type="method" static>
+  Creates a new LuaValue initialized to the specified string.
+  
+  <Expandable title="parameters">
+    <ParamField path="str" type="string" required>
+      The string value
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  LuaValue val = LuaValue.NewString("Hello, World!");
+  ```
+</ParamField>
+
+<ParamField path="NewBoolean" type="method" static>
+  Creates a new LuaValue initialized to the specified boolean.
+  
+  <Expandable title="parameters">
+    <ParamField path="v" type="bool" required>
+      The boolean value
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  LuaValue val = LuaValue.NewBoolean(true);
+  ```
+</ParamField>
+
+<ParamField path="NewTable" type="method" static>
+  Creates a new LuaValue initialized to a new table.
+  
+  <Expandable title="parameters">
+    <ParamField path="script" type="Script" required>
+      The owning script
+    </ParamField>
+    <ParamField path="arraySizeHint" type="int">
+      Size hint for array part (optional)
+    </ParamField>
+    <ParamField path="associativeSizeHint" type="int">
+      Size hint for associative part (optional)
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  LuaValue tbl = LuaValue.NewTable(script);
+  ```
+</ParamField>
+
+<ParamField path="NewCallback" type="method" static>
+  Creates a new LuaValue initialized to a CLR callback function.
+  
+  <Expandable title="parameters">
+    <ParamField path="callBack" type="Func<ScriptExecutionContext, CallbackArguments, LuaValue>" required>
+      The callback delegate
+    </ParamField>
+    <ParamField path="name" type="string">
+      Function name for debugging (optional)
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  LuaValue callback = LuaValue.NewCallback(
+      (ctx, args) => LuaValue.NewString("Hello from C#!")
+  );
+  script.Globals["myFunc"] = callback;
+  ```
+</ParamField>
+
+<ParamField path="NewTuple" type="method" static>
+  Creates a new tuple from the specified values.
+  
+  <Expandable title="parameters">
+    <ParamField path="values" type="params LuaValue[]" required>
+      The values to include in the tuple
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  LuaValue tuple = LuaValue.NewTuple(
+      LuaValue.NewNumber(1),
+      LuaValue.NewString("two"),
+      LuaValue.True
+  );
+  ```
+</ParamField>
+
+<ParamField path="NewNil" type="method" static>
+  Creates a new writable nil value.
+  
+  ```csharp
+  LuaValue val = LuaValue.NewNil();
+  ```
+</ParamField>
+
+## Conversion Methods
+
+<ParamField path="FromObject" type="method" static>
+  Creates a LuaValue from a CLR object.
+  
+  <Expandable title="parameters">
+    <ParamField path="script" type="Script" required>
+      The script context
+    </ParamField>
+    <ParamField path="obj" type="object" required>
+      The CLR object to convert
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The converted LuaValue
+  </ResponseField>
+  
+  ```csharp
+  LuaValue val = LuaValue.FromObject(script, 42);
+  LuaValue str = LuaValue.FromObject(script, "hello");
+  ```
+</ParamField>
+
+<ParamField path="ToObject" type="method">
+  Converts this LuaValue to a CLR object.
+  
+  <ResponseField name="returns" type="object">
+    The converted CLR object
+  </ResponseField>
+  
+  ```csharp
+  LuaValue val = LuaValue.NewNumber(42);
+  object obj = val.ToObject(); // Returns 42.0 (double)
+  ```
+</ParamField>
+
+<ParamField path="ToObject<T>" type="method">
+  Converts this LuaValue to a CLR object of the specified type.
+  
+  <ResponseField name="returns" type="T">
+    The converted CLR object
+  </ResponseField>
+  
+  ```csharp
+  LuaValue val = script.DoString("return 42");
+  int num = val.ToObject<int>(); // 42
+  ```
+</ParamField>
+
+## Type Checking and Coercion
+
+<ParamField path="CastToNumber" type="method">
+  Attempts to cast this value to a number, with string coercion.
+  
+  <ResponseField name="returns" type="double?">
+    The numeric value, or null if not convertible
+  </ResponseField>
+  
+  ```csharp
+  LuaValue str = LuaValue.NewString("42");
+  double? num = str.CastToNumber(); // 42.0
+  ```
+</ParamField>
+
+<ParamField path="CastToString" type="method">
+  Attempts to cast this value to a string, with number coercion.
+  
+  <ResponseField name="returns" type="string">
+    The string value, or null if not convertible
+  </ResponseField>
+  
+  ```csharp
+  LuaValue num = LuaValue.NewNumber(42);
+  string str = num.CastToString(); // "42"
+  ```
+</ParamField>
+
+<ParamField path="CastToBool" type="method">
+  Casts this value to a boolean following Lua rules (false and nil are false, everything else is true).
+  
+  <ResponseField name="returns" type="bool">
+    The boolean value
+  </ResponseField>
+  
+  ```csharp
+  LuaValue.Nil.CastToBool(); // false
+  LuaValue.False.CastToBool(); // false
+  LuaValue.NewNumber(0).CastToBool(); // true (in Lua, 0 is truthy)
+  ```
+</ParamField>
+
+<ParamField path="IsNil" type="method">
+  Determines whether this value is nil or void.
+  
+  <ResponseField name="returns" type="bool">
+    True if nil or void
+  </ResponseField>
+  
+  ```csharp
+  if (value.IsNil()) {
+      // Handle nil case
+  }
+  ```
+</ParamField>
+
+<ParamField path="IsNotNil" type="method">
+  Determines whether this value is not nil or void.
+  
+  <ResponseField name="returns" type="bool">
+    True if not nil or void
+  </ResponseField>
+</ParamField>
+
+<ParamField path="CheckType" type="method">
+  Checks that this value is of the specified type, throwing an exception if not.
+  
+  <Expandable title="parameters">
+    <ParamField path="funcName" type="string" required>
+      Function name for error messages
+    </ParamField>
+    <ParamField path="desiredType" type="DataType" required>
+      The expected type
+    </ParamField>
+    <ParamField path="argNum" type="int">
+      Argument number for error messages (optional, default -1)
+    </ParamField>
+    <ParamField path="flags" type="TypeValidationFlags">
+      Validation flags (optional)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    This value (for chaining)
+  </ResponseField>
+  
+  ```csharp
+  value.CheckType("myFunc", DataType.Number, 1);
+  ```
+</ParamField>
+
+## Utility Methods
+
+<ParamField path="GetLength" type="method">
+  Gets the length of a string or table value.
+  
+  <ResponseField name="returns" type="LuaValue">
+    The length as a LuaValue
+  </ResponseField>
+  
+  ```csharp
+  LuaValue str = LuaValue.NewString("hello");
+  int len = (int)str.GetLength().Number; // 5
+  ```
+</ParamField>
+
+<ParamField path="ToScalar" type="method">
+  Converts a tuple to a scalar value (returns the first element). If already scalar, returns this.
+  
+  <ResponseField name="returns" type="LuaValue">
+    The scalar value
+  </ResponseField>
+</ParamField>
+
+## Example Usage
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+
+// Creating values
+LuaValue num = LuaValue.NewNumber(42);
+LuaValue str = LuaValue.NewString("Hello");
+LuaValue tbl = LuaValue.NewTable(script);
+
+// Type checking
+if (value.Type == DataType.Number) {
+    Console.WriteLine($"Number: {value.Number}");
+}
+
+// Conversion
+LuaValue val = script.DoString("return 'test'");
+string result = val.String;
+
+// CLR interop
+LuaValue fromClr = LuaValue.FromObject(script, new List<int> { 1, 2, 3 });
+object toClr = fromClr.ToObject();
+
+// Callbacks
+script.Globals["add"] = LuaValue.NewCallback((ctx, args) => {
+    double a = args[0].Number;
+    double b = args[1].Number;
+    return LuaValue.NewNumber(a + b);
+});
+```

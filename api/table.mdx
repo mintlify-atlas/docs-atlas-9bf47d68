@@ -1,0 +1,335 @@
+---
+title: 'Table'
+description: 'A class representing a Lua table'
+---
+
+The `Table` class represents Lua tables, which are the primary data structure in Lua, supporting both array-like and associative (dictionary-like) access patterns.
+
+## Constructor
+
+<ParamField path="Table(Script, int, int)" type="constructor">
+  Creates a new table.
+  
+  <Expandable title="parameters">
+    <ParamField path="owner" type="Script" required>
+      The owning script (can be null for prime tables)
+    </ParamField>
+    <ParamField path="arraySizeHint" type="int">
+      Size hint for the array component (optional, default 0)
+    </ParamField>
+    <ParamField path="associativeSizeHint" type="int">
+      Size hint for the associative component (optional, default 0)
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  var table = new Table(script);
+  var optimized = new Table(script, arraySizeHint: 100, associativeSizeHint: 50);
+  ```
+</ParamField>
+
+## Properties
+
+<ResponseField name="Length" type="int">
+  Gets the length of the "array part" (the number of consecutive integer keys starting from 1).
+  
+  ```csharp
+  var table = new Table(script);
+  table[1] = "first";
+  table[2] = "second";
+  Console.WriteLine(table.Length); // 2
+  ```
+</ResponseField>
+
+<ResponseField name="MetaTable" type="Table">
+  Gets or sets the metatable associated with this table.
+  
+  ```csharp
+  var mt = new Table(script);
+  mt["__index"] = someFunction;
+  table.MetaTable = mt;
+  ```
+</ResponseField>
+
+<ResponseField name="OwnerScript" type="Script">
+  Gets the script owning this table.
+</ResponseField>
+
+<ResponseField name="Values" type="IEnumerable<LuaValue>">
+  Enumerates all values in the table.
+  
+  ```csharp
+  foreach (var value in table.Values) {
+      Console.WriteLine(value);
+  }
+  ```
+</ResponseField>
+
+## Indexer
+
+<ParamField path="this[object key]" type="indexer">
+  Gets or sets values using object keys. Automatically marshals CLR and Lua objects.
+  
+  ```csharp
+  // Setting values
+  table[1] = "first item";
+  table["name"] = "John";
+  table["nested"] = new Table(script);
+  
+  // Getting values
+  object value = table["name"];
+  string name = (string)table["name"];
+  ```
+</ParamField>
+
+<ParamField path="this[params object[] keys]" type="indexer">
+  Gets or sets values using multiple keys to access nested tables.
+  
+  ```csharp
+  table["player", "stats", "health"] = 100;
+  int health = (int)table["player", "stats", "health"];
+  ```
+</ParamField>
+
+## Get Methods
+
+<ParamField path="Get(LuaValue)" type="method">
+  Gets the value associated with the specified key.
+  
+  <Expandable title="parameters">
+    <ParamField path="key" type="LuaValue" required>
+      The key to look up
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The value, or LuaValue.Nil if not found
+  </ResponseField>
+  
+  ```csharp
+  LuaValue val = table.Get(LuaValue.NewString("key"));
+  ```
+</ParamField>
+
+<ParamField path="Get(string)" type="method">
+  Gets the value associated with the specified string key.
+  
+  <Expandable title="parameters">
+    <ParamField path="key" type="string" required>
+      The string key
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The value, or LuaValue.Nil if not found
+  </ResponseField>
+  
+  ```csharp
+  LuaValue name = table.Get("name");
+  ```
+</ParamField>
+
+<ParamField path="Get(int)" type="method">
+  Gets the value associated with the specified integer key.
+  
+  <Expandable title="parameters">
+    <ParamField path="key" type="int" required>
+      The integer key
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The value, or LuaValue.Nil if not found
+  </ResponseField>
+  
+  ```csharp
+  LuaValue first = table.Get(1); // Lua arrays are 1-indexed
+  ```
+</ParamField>
+
+<ParamField path="Get(object)" type="method">
+  Gets the value associated with the specified object key.
+  
+  <Expandable title="parameters">
+    <ParamField path="key" type="object" required>
+      The key (automatically converted to LuaValue)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The value, or LuaValue.Nil if not found
+  </ResponseField>
+</ParamField>
+
+## Set Methods
+
+<ParamField path="Set(LuaValue, LuaValue)" type="method">
+  Sets the value associated with the specified key.
+  
+  <Expandable title="parameters">
+    <ParamField path="key" type="LuaValue" required>
+      The key
+    </ParamField>
+    <ParamField path="value" type="LuaValue" required>
+      The value (use LuaValue.Nil to remove)
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  table.Set(LuaValue.NewString("key"), LuaValue.NewNumber(42));
+  table.Set(LuaValue.NewString("key"), LuaValue.Nil); // Remove
+  ```
+</ParamField>
+
+<ParamField path="Set(string, LuaValue)" type="method">
+  Sets the value associated with the specified string key.
+  
+  <Expandable title="parameters">
+    <ParamField path="key" type="string" required>
+      The string key
+    </ParamField>
+    <ParamField path="value" type="LuaValue" required>
+      The value
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  table.Set("name", LuaValue.NewString("John"));
+  ```
+</ParamField>
+
+<ParamField path="Set(object, LuaValue)" type="method">
+  Sets the value associated with the specified object key.
+  
+  <Expandable title="parameters">
+    <ParamField path="key" type="object" required>
+      The key
+    </ParamField>
+    <ParamField path="value" type="LuaValue" required>
+      The value
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Array Methods
+
+<ParamField path="Append" type="method">
+  Appends a value to the end of the array part (at index Length + 1).
+  
+  <Expandable title="parameters">
+    <ParamField path="value" type="LuaValue" required>
+      The value to append
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  var array = new Table(script);
+  array.Append(LuaValue.NewNumber(1));
+  array.Append(LuaValue.NewNumber(2));
+  array.Append(LuaValue.NewNumber(3));
+  // array = {1, 2, 3}
+  ```
+</ParamField>
+
+<ParamField path="Insert" type="method">
+  Inserts a value at the specified index, shifting subsequent elements.
+  
+  <Expandable title="parameters">
+    <ParamField path="index" type="int" required>
+      The index at which to insert (1-based)
+    </ParamField>
+    <ParamField path="value" type="LuaValue" required>
+      The value to insert
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  table.Insert(1, LuaValue.NewString("inserted at start"));
+  ```
+</ParamField>
+
+<ParamField path="Sort" type="method">
+  Sorts the array segment of the table.
+  
+  <Expandable title="parameters">
+    <ParamField path="sortComparer" type="IComparer<LuaValue>" required>
+      The comparer to use for sorting
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  table.Sort(Comparer<LuaValue>.Create((a, b) => 
+      a.Number.CompareTo(b.Number)
+  ));
+  ```
+</ParamField>
+
+## Utility Methods
+
+<ParamField path="Clear" type="method">
+  Removes all items from the table.
+  
+  ```csharp
+  table.Clear();
+  ```
+</ParamField>
+
+<ParamField path="GetEnumerator" type="method">
+  Gets an enumerator for iterating over all key-value pairs.
+  
+  ```csharp
+  foreach (var kvp in table) {
+      Console.WriteLine($"{kvp.Key}: {kvp.Value}");
+  }
+  ```
+</ParamField>
+
+## Example Usage
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+
+var script = new Script();
+
+// Create and populate a table
+var table = new Table(script);
+
+// Array-like access (1-indexed)
+table[1] = "first";
+table[2] = "second";
+table[3] = "third";
+Console.WriteLine(table.Length); // 3
+
+// Associative access
+table["name"] = "John";
+table["age"] = 30;
+table["active"] = true;
+
+// Nested tables
+var nested = new Table(script);
+nested["x"] = 10;
+nested["y"] = 20;
+table["position"] = nested;
+
+// Access nested values
+Console.WriteLine(table["position", "x"]); // 10
+
+// Iterate over table
+foreach (var kvp in table) {
+    Console.WriteLine($"{kvp.Key}: {kvp.Value}");
+}
+
+// Use from Lua
+script.Globals["myTable"] = table;
+script.DoString(@"
+    print(myTable[1])        -- first
+    print(myTable.name)      -- John
+    print(myTable.position.x) -- 10
+");
+
+// Metatables
+var mt = new Table(script);
+mt["__tostring"] = (Func<Table, string>)((t) => "Custom Table");
+table.MetaTable = mt;
+```

@@ -1,0 +1,414 @@
+---
+title: Math Module
+description: Mathematical functions and constants in SolarSharp
+---
+
+The Math module (`CoreModules.Math`) provides comprehensive mathematical functions and constants, wrapping .NET's `System.Math` class.
+
+## Constants
+
+### math.pi
+
+The value of π (pi).
+
+```lua
+print(math.pi)  -- 3.1415926535898
+```
+
+### math.huge
+
+Represents positive infinity.
+
+```lua
+print(math.huge)       -- inf
+print(-math.huge)      -- -inf
+print(1 / 0)           -- inf
+print(math.huge > 1000000)  -- true
+```
+
+## Basic Functions
+
+### math.abs(x)
+
+Returns the absolute value.
+
+```lua
+print(math.abs(-5))    -- 5
+print(math.abs(3.14))  -- 3.14
+print(math.abs(0))     -- 0
+```
+
+### math.ceil(x)
+
+Rounds up to the nearest integer.
+
+```lua
+print(math.ceil(3.2))   -- 4
+print(math.ceil(-3.8))  -- -3
+print(math.ceil(5))     -- 5
+```
+
+### math.floor(x)
+
+Rounds down to the nearest integer.
+
+```lua
+print(math.floor(3.8))   -- 3
+print(math.floor(-3.2))  -- -4
+print(math.floor(5))     -- 5
+```
+
+### math.max(...)
+
+Returns the maximum value from arguments.
+
+```lua
+print(math.max(1, 2, 3))           -- 3
+print(math.max(-5, 10, 3))         -- 10
+print(math.max(1.5, 1.2, 1.8))     -- 1.8
+```
+
+**Requires:** At least one argument
+
+### math.min(...)
+
+Returns the minimum value from arguments.
+
+```lua
+print(math.min(1, 2, 3))           -- 1
+print(math.min(-5, 10, 3))         -- -5
+print(math.min(1.5, 1.2, 1.8))     -- 1.2
+```
+
+**Requires:** At least one argument
+
+## Rounding and Decomposition
+
+### math.modf(x)
+
+Returns the integer and fractional parts of a number.
+
+```lua
+local int, frac = math.modf(3.75)
+print(int)   -- 3
+print(frac)  -- 0.75
+
+local int, frac = math.modf(-3.75)
+print(int)   -- -3
+print(frac)  -- -0.75
+```
+
+**Returns:** Integer part, fractional part
+
+### math.fmod(x, y)
+
+Returns the remainder of division.
+
+```lua
+print(math.fmod(10, 3))    -- 1
+print(math.fmod(10.5, 3))  -- 1.5
+print(math.fmod(-10, 3))   -- -1
+```
+
+**Note:** Uses IEEE remainder calculation.
+
+## Power and Exponential
+
+### math.pow(x, y)
+
+Raises x to the power of y.
+
+```lua
+print(math.pow(2, 3))     -- 8
+print(math.pow(10, 2))    -- 100
+print(math.pow(2, -1))    -- 0.5
+```
+
+**Alternative:** You can also use the `^` operator:
+```lua
+print(2^3)   -- 8
+print(10^2)  -- 100
+```
+
+### math.sqrt(x)
+
+Returns the square root.
+
+```lua
+print(math.sqrt(16))      -- 4
+print(math.sqrt(2))       -- 1.4142135623731
+print(math.sqrt(0))       -- 0
+```
+
+### math.exp(x)
+
+Returns e raised to the power of x.
+
+```lua
+print(math.exp(1))    -- 2.718281828459 (e)
+print(math.exp(0))    -- 1
+print(math.exp(2))    -- 7.389056098931
+```
+
+### math.log(x [, base])
+
+Returns the logarithm of x.
+
+```lua
+print(math.log(math.exp(1)))  -- 1 (natural log)
+print(math.log(10))           -- 2.302585092994
+print(math.log(100, 10))      -- 2 (log base 10)
+print(math.log(8, 2))         -- 3 (log base 2)
+```
+
+**Parameters:**
+- `x` - Value
+- `base` - Optional base (default: e for natural logarithm)
+
+### math.frexp(x)
+
+Decomposes a number into mantissa and exponent.
+
+```lua
+local mantissa, exponent = math.frexp(8)
+print(mantissa)  -- 0.5
+print(exponent)  -- 4
+-- 8 = 0.5 * 2^4
+
+local m, e = math.frexp(1234.5)
+print(m, e)  -- 0.6025390625  11
+-- 1234.5 = 0.6025390625 * 2^11
+```
+
+**Returns:** Mantissa m and exponent e such that `x = m * 2^e`, where `0.5 <= |m| < 1`
+
+### math.ldexp(m, e)
+
+Computes `m * 2^e`.
+
+```lua
+print(math.ldexp(0.5, 4))   -- 8
+print(math.ldexp(1, 10))    -- 1024
+
+-- Inverse of frexp
+local m, e = math.frexp(1234.5)
+print(math.ldexp(m, e))     -- 1234.5
+```
+
+## Trigonometric Functions
+
+### math.sin(x) / math.cos(x) / math.tan(x)
+
+Basic trigonometric functions (x in radians).
+
+```lua
+print(math.sin(0))              -- 0
+print(math.sin(math.pi / 2))    -- 1
+print(math.cos(0))              -- 1
+print(math.cos(math.pi))        -- -1
+print(math.tan(0))              -- 0
+print(math.tan(math.pi / 4))    -- 1 (approximately)
+```
+
+### math.asin(x) / math.acos(x) / math.atan(x)
+
+Inverse trigonometric functions (return radians).
+
+```lua
+print(math.asin(1))         -- 1.5707963267949 (π/2)
+print(math.acos(1))         -- 0
+print(math.atan(1))         -- 0.78539816339745 (π/4)
+```
+
+**Domain:** `asin` and `acos` require -1 ≤ x ≤ 1
+
+### math.atan2(y, x)
+
+Returns the angle (in radians) from the x-axis to the point (x, y).
+
+```lua
+print(math.atan2(0, 1))     -- 0 (pointing right)
+print(math.atan2(1, 0))     -- 1.5707963267949 (pointing up)
+print(math.atan2(0, -1))    -- 3.1415926535898 (pointing left)
+print(math.atan2(-1, 0))    -- -1.5707963267949 (pointing down)
+```
+
+**Range:** -π to π
+
+### math.sinh(x) / math.cosh(x) / math.tanh(x)
+
+Hyperbolic trigonometric functions.
+
+```lua
+print(math.sinh(0))    -- 0
+print(math.cosh(0))    -- 1
+print(math.tanh(0))    -- 0
+```
+
+## Angle Conversion
+
+### math.deg(x)
+
+Converts radians to degrees.
+
+```lua
+print(math.deg(math.pi))      -- 180
+print(math.deg(math.pi / 2))  -- 90
+print(math.deg(0))            -- 0
+```
+
+### math.rad(x)
+
+Converts degrees to radians.
+
+```lua
+print(math.rad(180))   -- 3.1415926535898 (π)
+print(math.rad(90))    -- 1.5707963267949 (π/2)
+print(math.rad(0))     -- 0
+```
+
+## Random Numbers
+
+### math.random([m [, n]])
+
+Generates random numbers.
+
+```lua
+-- Random float between 0 and 1
+print(math.random())         -- 0.841...  
+
+-- Random integer between 1 and m
+print(math.random(10))       -- 7 (for example)
+
+-- Random integer between m and n
+print(math.random(5, 10))    -- 8 (for example)
+print(math.random(10, 5))    -- Same as (5, 10)
+```
+
+**Modes:**
+- `math.random()` - Returns float in [0, 1)
+- `math.random(m)` - Returns integer in [1, m]
+- `math.random(m, n)` - Returns integer in [min(m,n), max(m,n)]
+
+### math.randomseed(x)
+
+Sets the random number generator seed.
+
+```lua
+math.randomseed(12345)
+print(math.random())  -- Always the same sequence with same seed
+
+-- Use current time for different sequences
+math.randomseed(os.time())
+```
+
+**Note:** SolarSharp uses .NET's `System.Random` class internally, initialized per script instance.
+
+## Examples
+
+### Distance Calculation
+
+```lua
+function distance(x1, y1, x2, y2)
+    local dx = x2 - x1
+    local dy = y2 - y1
+    return math.sqrt(dx*dx + dy*dy)
+end
+
+print(distance(0, 0, 3, 4))  -- 5
+```
+
+### Angle Between Two Points
+
+```lua
+function angleBetween(x1, y1, x2, y2)
+    local dx = x2 - x1
+    local dy = y2 - y1
+    return math.atan2(dy, dx)
+end
+
+local angle = angleBetween(0, 0, 1, 1)
+print(math.deg(angle))  -- 45 degrees
+```
+
+### Clamp Value
+
+```lua
+function clamp(value, min, max)
+    return math.max(min, math.min(max, value))
+end
+
+print(clamp(5, 0, 10))   -- 5
+print(clamp(-5, 0, 10))  -- 0
+print(clamp(15, 0, 10))  -- 10
+```
+
+### Linear Interpolation
+
+```lua
+function lerp(a, b, t)
+    return a + (b - a) * t
+end
+
+print(lerp(0, 10, 0.5))   -- 5
+print(lerp(0, 10, 0.25))  -- 2.5
+print(lerp(0, 10, 1))     -- 10
+```
+
+### Round to Decimal Places
+
+```lua
+function round(num, decimals)
+    local mult = 10^(decimals or 0)
+    return math.floor(num * mult + 0.5) / mult
+end
+
+print(round(3.14159, 2))   -- 3.14
+print(round(3.14159, 3))   -- 3.142
+print(round(3.5))          -- 4
+```
+
+### Check if Power of Two
+
+```lua
+function isPowerOfTwo(n)
+    return n > 0 and math.floor(math.log(n, 2)) == math.log(n, 2)
+end
+
+print(isPowerOfTwo(8))    -- true
+print(isPowerOfTwo(10))   -- false
+print(isPowerOfTwo(1024)) -- true
+```
+
+### Random Choice from Array
+
+```lua
+function choice(array)
+    local index = math.random(1, #array)
+    return array[index]
+end
+
+local colors = {"red", "green", "blue", "yellow"}
+print(choice(colors))  -- Random color
+```
+
+## C# Integration
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Modules;
+
+var script = new Script(CoreModules.Math);
+
+// Math module is automatically available
+script.DoString(@"
+    print(math.sqrt(16))
+    print(math.sin(math.pi / 2))
+");
+```
+
+## See Also
+
+- [Basic Functions](/stdlib/basic)
+- [OS Time Module](/stdlib/os#time-functions)
+- [Coroutine Module](/stdlib/coroutine)

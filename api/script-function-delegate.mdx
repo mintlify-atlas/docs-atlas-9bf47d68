@@ -1,0 +1,260 @@
+---
+title: 'ScriptFunctionDelegate'
+description: 'Delegate types for wrapping Lua functions as C# delegates'
+---
+
+The `ScriptFunctionDelegate` types allow Lua functions to be wrapped as C# delegates, enabling seamless integration between Lua and C# code.
+
+## Delegates
+
+<ParamField path="ScriptFunctionDelegate" type="delegate">
+  A delegate type that wraps a Lua function with object return type.
+  
+  <Expandable title="signature">
+    <ParamField path="args" type="params object[]" required>
+      The arguments to pass to the Lua function
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="object">
+    The return value of the Lua function
+  </ResponseField>
+  
+  ```csharp
+  // Signature:
+  public delegate object ScriptFunctionDelegate(params object[] args);
+  ```
+</ParamField>
+
+<ParamField path="ScriptFunctionDelegate<T>" type="delegate">
+  A generic delegate type that wraps a Lua function with strongly-typed return value.
+  
+  <Expandable title="signature">
+    <ParamField path="args" type="params object[]" required>
+      The arguments to pass to the Lua function
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="T">
+    The return value automatically converted to type T
+  </ResponseField>
+  
+  ```csharp
+  // Signature:
+  public delegate T ScriptFunctionDelegate<out T>(params object[] args);
+  ```
+</ParamField>
+
+## Usage
+
+These delegates are obtained from `Closure` objects using the `GetDelegate` methods:
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+
+var script = new Script();
+
+// Define a Lua function
+script.DoString(@"
+    function add(a, b)
+        return a + b
+    end
+    
+    function greet(name)
+        return 'Hello, ' .. name .. '!'
+    end
+");
+
+// Get as untyped delegate
+Closure addFunc = script.Globals.Get("add").Function;
+ScriptFunctionDelegate addDel = addFunc.GetDelegate();
+
+object result = addDel(10, 20);
+Console.WriteLine(result); // 30.0 (as double)
+
+// Get as typed delegate
+ScriptFunctionDelegate<double> typedAddDel = addFunc.GetDelegate<double>();
+double sum = typedAddDel(5, 7);
+Console.WriteLine(sum); // 12.0
+
+// String return type
+Closure greetFunc = script.Globals.Get("greet").Function;
+ScriptFunctionDelegate<string> greetDel = greetFunc.GetDelegate<string>();
+
+string greeting = greetDel("World");
+Console.WriteLine(greeting); // "Hello, World!"
+```
+
+## Examples
+
+### Basic Usage
+
+```csharp
+var script = new Script();
+
+script.DoString("function multiply(x, y) return x * y end");
+
+var func = script.Globals.Get("multiply").Function;
+ScriptFunctionDelegate<int> multiply = func.GetDelegate<int>();
+
+int result = multiply(6, 7);
+Console.WriteLine(result); // 42
+```
+
+### Passing Complex Arguments
+
+```csharp
+script.DoString(@"
+    function processData(name, age, items)
+        local result = name .. ' is ' .. age .. ' years old'
+        if items then
+            result = result .. ' and has ' .. #items .. ' items'
+        end
+        return result
+    end
+");
+
+var func = script.Globals.Get("processData").Function;
+ScriptFunctionDelegate<string> process = func.GetDelegate<string>();
+
+string result = process("Alice", 30, new[] { 1, 2, 3 });
+Console.WriteLine(result); 
+// "Alice is 30 years old and has 3 items"
+```
+
+### Using with LINQ
+
+```csharp
+script.DoString("function isEven(n) return n % 2 == 0 end");
+
+var isEven = script.Globals.Get("isEven").Function.GetDelegate<bool>();
+
+var numbers = new[] { 1, 2, 3, 4, 5, 6 };
+var evenNumbers = numbers.Where(n => isEven(n));
+
+Console.WriteLine(string.Join(", ", evenNumbers)); // 2, 4, 6
+```
+
+### Callback Pattern
+
+```csharp
+public void ProcessItems<T>(IEnumerable<T> items, ScriptFunctionDelegate<bool> filter)
+{
+    foreach (var item in items)
+    {
+        if (filter(item))
+        {
+            Console.WriteLine(item);
+        }
+    }
+}
+
+script.DoString("function isPositive(n) return n > 0 end");
+
+var filter = script.Globals.Get("isPositive").Function.GetDelegate<bool>();
+ProcessItems(new[] { -1, 2, -3, 4, 5 }, filter);
+// Output: 2, 4, 5
+```
+
+### Event Handlers
+
+```csharp
+public class Button
+{
+    public event EventHandler<string> Clicked;
+    
+    public void Click(string data)
+    {
+        Clicked?.Invoke(this, data);
+    }
+}
+
+var button = new Button();
+UserData.RegisterType<Button>();
+
+script.Globals["button"] = UserData.Create(button);
+
+script.DoString(@"
+    function onButtonClick(sender, data)
+        print('Button clicked with: ' .. data)
+    end
+");
+
+var handler = script.Globals.Get("onButtonClick").Function.GetDelegate();
+button.Clicked += (sender, data) => handler(sender, data);
+
+button.Click("test data"); // Calls Lua function
+```
+
+### Multiple Return Values
+
+```csharp
+script.DoString(@"
+    function divmod(a, b)
+        return math.floor(a / b), a % b
+    end
+");
+
+var divmod = script.Globals.Get("divmod").Function.GetDelegate();
+
+// Returns a tuple
+object result = divmod(17, 5);
+if (result is LuaValue luaResult && luaResult.Type == DataType.Tuple)
+{
+    var quotient = luaResult.Tuple[0].Number;
+    var remainder = luaResult.Tuple[1].Number;
+    Console.WriteLine($"{quotient}, {remainder}"); // 3, 2
+}
+```
+
+### Error Handling
+
+```csharp
+script.DoString(@"
+    function riskyOperation(value)
+        if value < 0 then
+            error('Value must be non-negative')
+        end
+        return value * 2
+    end
+");
+
+var risky = script.Globals.Get("riskyOperation").Function.GetDelegate<double>();
+
+try
+{
+    double result = risky(-5);
+}
+catch (ScriptRuntimeException ex)
+{
+    Console.WriteLine($"Lua error: {ex.Message}");
+    // Lua error: Value must be non-negative
+}
+```
+
+## Type Conversion
+
+Arguments passed to the delegate are automatically converted from C# to Lua types:
+- Numbers (int, double, etc.) → Lua numbers
+- Strings → Lua strings
+- Booleans → Lua booleans
+- null → Lua nil
+- Collections → Lua tables
+- Other objects → Lua userdata
+
+Return values are converted from Lua to C# types:
+- Lua numbers → double (or requested numeric type)
+- Lua strings → string
+- Lua booleans → bool
+- Lua tables → Table or Dictionary/List (depending on structure)
+- Lua nil → null
+- Lua userdata → Original CLR object
+
+## Performance Considerations
+
+While convenient, delegate wrappers add a small overhead compared to calling functions directly via `Script.Call()`. For performance-critical code with many calls, consider:
+
+1. Caching the delegate instead of getting it each time
+2. Using `Script.Call()` directly for maximum performance
+3. Batching operations when possible

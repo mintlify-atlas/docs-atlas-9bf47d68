@@ -1,0 +1,194 @@
+---
+title: CLR Interop Overview
+description: Understanding SolarSharp's CLR interoperability system
+---
+
+SolarSharp provides a comprehensive interoperability system that allows seamless integration between Lua scripts and .NET CLR objects. This system enables you to expose C# classes, methods, and properties to Lua scripts with minimal configuration.
+
+## What is CLR Interop?
+
+CLR Interop is the mechanism by which SolarSharp bridges the gap between Lua's dynamic runtime and .NET's statically-typed Common Language Runtime. It handles:
+
+- Type registration and descriptor management
+- Method and property access from Lua
+- Automatic type conversion between Lua and CLR types
+- Custom type descriptors for fine-grained control
+
+## Key Components
+
+The interop system consists of several key components:
+
+### UserData
+
+The `UserData` class is the central registry for CLR types exposed to Lua. It maintains a global registry of type descriptors and provides methods for type registration.
+
+```csharp
+// Register a type for Lua interop
+UserData.RegisterType<MyClass>();
+
+// Register with specific access mode
+UserData.RegisterType<MyClass>(InteropAccessMode.Reflection);
+```
+
+### Type Descriptors
+
+Type descriptors (`IUserDataDescriptor`) define how Lua scripts can interact with CLR objects. They handle:
+
+- Index operations (property/field access)
+- Method invocations
+- Metamethod implementations
+- Type compatibility checks
+
+### Registration Policies
+
+Registration policies (`IRegistrationPolicy`) control how types are registered and whether automatic registration is allowed:
+
+- **DefaultRegistrationPolicy** - Prevents overwriting existing registrations, no auto-registration
+- **AutomaticRegistrationPolicy** - Allows automatic type registration on first use
+- **PermanentRegistrationPolicy** - Prevents type deregistration
+
+```csharp
+// Set the global registration policy
+UserData.RegistrationPolicy = new AutomaticRegistrationPolicy();
+```
+
+## InteropAccessMode
+
+The `InteropAccessMode` enum determines how SolarSharp optimizes member access for registered types:
+
+<CodeGroup>
+```csharp Reflection
+// Slowest, uses reflection every time
+// Saves memory if members are rarely accessed
+UserData.RegisterType<MyClass>(InteropAccessMode.Reflection);
+```
+
+```csharp LazyOptimized
+// Default mode - optimizes on first access
+// Good balance of memory and performance
+UserData.RegisterType<MyClass>(InteropAccessMode.LazyOptimized);
+```
+
+```csharp Preoptimized
+// Optimizes all members at registration time
+// Best performance, higher memory usage
+UserData.RegisterType<MyClass>(InteropAccessMode.Preoptimized);
+```
+
+```csharp BackgroundOptimized
+// Optimizes in background thread
+// Falls back to reflection if accessed before ready
+UserData.RegisterType<MyClass>(InteropAccessMode.BackgroundOptimized);
+```
+</CodeGroup>
+
+### Access Modes
+
+| Mode | Optimization Timing | Performance | Memory Usage | Use Case |
+|------|-------------------|-------------|--------------|----------|
+| **Reflection** | Never | Slowest | Lowest | Rarely-used types |
+| **LazyOptimized** | On first access | Good | Medium | General purpose (default) |
+| **Preoptimized** | At registration | Fastest | Highest | Frequently-used types |
+| **BackgroundOptimized** | Background thread | Good | Medium | Large types, async scenarios |
+| **HideMembers** | N/A | N/A | Lowest | Prevent all member access |
+| **NoReflectionAllowed** | N/A | N/A | Lowest | Custom descriptors only |
+
+<Note>
+On AOT platforms like iOS, SolarSharp may automatically downgrade optimization modes to Reflection regardless of the specified mode.
+</Note>
+
+## Default Access Mode
+
+You can set a default access mode for all type registrations:
+
+```csharp
+// Set default to Preoptimized for better performance
+UserData.DefaultAccessMode = InteropAccessMode.Preoptimized;
+
+// Now all registrations use Preoptimized unless specified
+UserData.RegisterType<MyClass>(); // Uses Preoptimized
+```
+
+## Type Registration Methods
+
+SolarSharp provides several ways to register types:
+
+<Steps>
+  <Step title="Manual Registration">
+    Explicitly register individual types:
+    
+    ```csharp
+    UserData.RegisterType<Person>();
+    UserData.RegisterType<Address>(InteropAccessMode.Reflection);
+    ```
+  </Step>
+  
+  <Step title="Assembly Registration">
+    Register all types marked with `[SolarSharpUserData]` in an assembly:
+    
+    ```csharp
+    UserData.RegisterAssembly();
+    ```
+  </Step>
+  
+  <Step title="Custom Descriptors">
+    Provide your own descriptor for complete control:
+    
+    ```csharp
+    var descriptor = new MyCustomDescriptor();
+    UserData.RegisterType<MyClass>(descriptor);
+    ```
+  </Step>
+</Steps>
+
+## Checking Registration Status
+
+You can check if a type is registered:
+
+```csharp
+if (UserData.IsTypeRegistered<MyClass>())
+{
+    // Type is registered
+}
+
+if (UserData.IsTypeRegistered(typeof(MyClass)))
+{
+    // Type is registered
+}
+```
+
+<Warning>
+The `IsTypeRegistered` method only checks for exact type matches. A type may still be accessible through base class or interface descriptors even if it returns `false`.
+</Warning>
+
+## Unregistering Types
+
+Types can be unregistered, though this should be done carefully:
+
+```csharp
+UserData.UnregisterType<MyClass>();
+```
+
+<Warning>
+Unregistering types at runtime is dangerous and may cause errors in existing scripts. Only use this for testing or to re-register types with different configurations. Discard all loaded scripts after unregistering types.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Calling C# from Lua" icon="code" href="/interop/calling-csharp-from-lua">
+    Learn how to expose C# methods and objects to Lua scripts
+  </Card>
+  
+  <Card title="Calling Lua from C#" icon="arrow-right-arrow-left" href="/interop/calling-lua-from-csharp">
+    Execute Lua functions from your C# code
+  </Card>
+  
+  <Card title="UserData Types" icon="database" href="/interop/user-data">
+    Deep dive into UserData registration and custom types
+  </Card>
+  
+  <Card title="Type Converters" icon="arrows-rotate" href="/interop/converters">
+    Customize type conversion between Lua and CLR
+  </Card>
+</CardGroup>

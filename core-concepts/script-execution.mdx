@@ -1,0 +1,327 @@
+---
+title: "Script Execution"
+description: "Learn how to execute Lua scripts in SolarSharp using DoString, DoFile, and related methods"
+---
+
+## Overview
+
+SolarSharp provides several methods to load and execute Lua scripts. You can execute code from strings, files, or streams, and optionally provide custom global contexts.
+
+## Quick Start
+
+The simplest way to execute Lua code:
+
+```csharp
+using SolarSharp.Interpreter;
+
+// Execute a script and get the result
+var result = Script.RunString("return 2 + 2");
+Console.WriteLine(result.Number); // 4
+```
+
+## Execution Methods
+
+### DoString
+
+Executes Lua code from a string and returns the result.
+
+```csharp
+Script script = new Script();
+
+// Execute simple code
+LuaValue result = script.DoString("return 'Hello, World!'");
+Console.WriteLine(result.String); // "Hello, World!"
+
+// Execute code with a custom global table
+Table customGlobals = new Table(script);
+customGlobals["myVar"] = 42;
+LuaValue result2 = script.DoString("return myVar * 2", customGlobals);
+Console.WriteLine(result2.Number); // 84
+```
+
+**Signature:**
+```csharp
+public LuaValue DoString(string code, Table globalContext = null, string codeFriendlyName = null)
+```
+
+<ParamField path="code" type="string" required>
+  The Lua code to execute
+</ParamField>
+
+<ParamField path="globalContext" type="Table">
+  Optional custom global table. If null, uses `Script.Globals`
+</ParamField>
+
+<ParamField path="codeFriendlyName" type="string">
+  Optional name for error reporting and debugging
+</ParamField>
+
+### DoFile
+
+Executes a Lua script from a file.
+
+```csharp
+Script script = new Script();
+
+// Execute a script file
+LuaValue result = script.DoFile("scripts/main.lua");
+
+// With custom globals
+Table globals = new Table(script);
+globals["config"] = myConfigObject;
+LuaValue result2 = script.DoFile("scripts/init.lua", globals);
+```
+
+**Signature:**
+```csharp
+public LuaValue DoFile(string filename, Table globalContext = null, string codeFriendlyName = null)
+```
+
+<Note>
+The file path is resolved through the configured `ScriptLoader`. By default, this uses the file system.
+</Note>
+
+### DoStream
+
+Executes Lua code from a `Stream`. Supports both text and precompiled bytecode.
+
+```csharp
+using (var stream = File.OpenRead("script.lua"))
+{
+    LuaValue result = script.DoStream(stream);
+}
+```
+
+**Signature:**
+```csharp
+public LuaValue DoStream(Stream stream, Table globalContext = null, string codeFriendlyName = null)
+```
+
+## Static Helper Methods
+
+For quick one-off script execution:
+
+### RunString
+
+```csharp
+// Creates a new Script instance and executes the code
+LuaValue result = Script.RunString("return math.sqrt(16)");
+Console.WriteLine(result.Number); // 4
+```
+
+### RunFile
+
+```csharp
+// Creates a new Script instance and executes the file
+LuaValue result = Script.RunFile("script.lua");
+```
+
+<Warning>
+These static methods create a new `Script` instance for each call. For better performance when executing multiple scripts, create a single `Script` instance and reuse it.
+</Warning>
+
+## Load vs Execute
+
+You can separate loading from execution using `LoadString`, `LoadFile`, and `LoadFunction`:
+
+```csharp
+Script script = new Script();
+
+// Load (compile) the script without executing
+LuaValue function = script.LoadString("return x + y");
+
+// Execute multiple times with different globals
+Table globals1 = new Table(script);
+globals1["x"] = 10;
+globals1["y"] = 5;
+LuaValue result1 = script.Call(function); // Uses Script.Globals
+
+Table globals2 = new Table(script);
+globals2["x"] = 20;
+globals2["y"] = 3;
+// To use different globals, you need to load the function with that table
+LuaValue function2 = script.LoadString("return x + y", globals2);
+LuaValue result2 = script.Call(function2); // 23
+```
+
+### LoadString
+
+```csharp
+public LuaValue LoadString(string code, Table globalTable = null, string codeFriendlyName = null)
+```
+
+Loads and compiles a string into a Lua function without executing it.
+
+### LoadFile
+
+```csharp
+public LuaValue LoadFile(string filename, Table globalContext = null, string friendlyFilename = null)
+```
+
+Loads and compiles a file into a Lua function.
+
+### LoadStream
+
+```csharp
+public LuaValue LoadStream(Stream stream, Table globalTable = null, string codeFriendlyName = null)
+```
+
+Loads and compiles from a stream.
+
+## Script Dumping
+
+You can serialize (dump) compiled Lua functions to bytecode:
+
+```csharp
+Script script = new Script();
+LuaValue func = script.LoadString("return 2 + 2");
+
+// Dump to stream
+using (var stream = File.Create("script.bin"))
+{
+    script.Dump(func, stream);
+}
+
+// Load the dumped bytecode
+using (var stream = File.OpenRead("script.bin"))
+{
+    LuaValue loaded = script.LoadStream(stream);
+    LuaValue result = script.Call(loaded); // 4
+}
+```
+
+<Note>
+Dumped scripts can include a special base64 header. SolarSharp automatically detects and handles this format.
+</Note>
+
+## Global Tables
+
+Each `Script` instance has a default global table (`Script.Globals`) that contains standard Lua libraries:
+
+```csharp
+Script script = new Script();
+
+// Add custom global values
+script.Globals["PI"] = 3.14159;
+script.Globals["Greet"] = (Func<string, string>)(name => $"Hello, {name}!");
+
+// Use in Lua code
+script.DoString("print(Greet('World'))"); // "Hello, World!"
+script.DoString("print(PI * 2)"); // 6.28318
+```
+
+### Custom Global Contexts
+
+You can create isolated execution environments with custom global tables:
+
+```csharp
+Script script = new Script();
+
+// Create a sandboxed environment
+Table sandbox = new Table(script);
+sandbox["print"] = script.Globals["print"]; // Allow print only
+sandbox["math"] = script.Globals["math"];   // Allow math library
+
+// This will work
+script.DoString("print(math.sqrt(16))", sandbox);
+
+// This will fail - 'io' is not available in sandbox
+// script.DoString("io.open('file.txt')", sandbox);
+```
+
+## Core Modules
+
+When creating a `Script`, you can specify which core modules to load:
+
+```csharp
+using SolarSharp.Interpreter.Modules;
+
+// Default preset (most common modules)
+Script script1 = new Script();
+
+// Specific modules
+Script script2 = new Script(CoreModules.Basic | CoreModules.Table | CoreModules.String);
+
+// All modules
+Script script3 = new Script(CoreModules.Preset_Complete);
+
+// Minimal (no standard libraries)
+Script script4 = new Script(CoreModules.None);
+```
+
+## Error Handling
+
+Script execution can throw exceptions:
+
+```csharp
+using SolarSharp.Interpreter.Errors;
+
+try
+{
+    script.DoString("error('Something went wrong!')");
+}
+catch (ScriptRuntimeException ex)
+{
+    Console.WriteLine($"Lua error: {ex.Message}");
+    Console.WriteLine($"Call stack: {ex.CallStack}");
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Reuse Script instances">
+    Creating a new `Script` instance has overhead. Reuse instances when executing multiple scripts:
+    
+    ```csharp
+    // Good
+    Script script = new Script();
+    script.DoString("print('Script 1')");
+    script.DoString("print('Script 2')");
+    
+    // Less efficient
+    Script.RunString("print('Script 1')");
+    Script.RunString("print('Script 2')");
+    ```
+  </Accordion>
+  
+  <Accordion title="Use meaningful names for error reporting">
+    Provide descriptive names to help with debugging:
+    
+    ```csharp
+    script.DoString(code, null, "player-init-script");
+    script.DoFile("config.lua", null, "app-configuration");
+    ```
+  </Accordion>
+  
+  <Accordion title="Separate loading from execution for reusable scripts">
+    If you need to execute the same script multiple times, load it once:
+    
+    ```csharp
+    LuaValue updateFunc = script.LoadString("-- update logic");
+    
+    // In game loop
+    while (running)
+    {
+        script.Call(updateFunc);
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Lua Values" href="/core-concepts/lua-values" icon="hashtag">
+    Understanding the LuaValue type system
+  </Card>
+  <Card title="Functions" href="/core-concepts/functions" icon="function">
+    Calling Lua functions and handling return values
+  </Card>
+  <Card title="Tables" href="/core-concepts/tables" icon="table">
+    Working with Lua tables
+  </Card>
+  <Card title="Coroutines" href="/core-concepts/coroutines" icon="arrows-rotate">
+    Asynchronous execution with coroutines
+  </Card>
+</CardGroup>

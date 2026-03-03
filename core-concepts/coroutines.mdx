@@ -1,0 +1,664 @@
+---
+title: "Coroutines"
+description: "Working with Lua coroutines in SolarSharp - creating, yielding, resuming, and managing asynchronous execution"
+---
+
+## Overview
+
+Coroutines in Lua provide cooperative multitasking, allowing you to pause and resume function execution. SolarSharp's `Coroutine` class provides full support for Lua coroutines with additional C# integration.
+
+## What are Coroutines?
+
+Coroutines are functions that can be suspended and resumed. Unlike threads, they don't run concurrently - only one coroutine executes at a time, and they explicitly yield control:
+
+```lua
+function countdown()
+    for i = 3, 1, -1 do
+        print(i)
+        coroutine.yield()
+    end
+    print("Liftoff!")
+end
+
+co = coroutine.create(countdown)
+coroutine.resume(co)  -- Prints: 3
+coroutine.resume(co)  -- Prints: 2
+coroutine.resume(co)  -- Prints: 1
+coroutine.resume(co)  -- Prints: Liftoff!
+```
+
+## Creating Coroutines
+
+### From C#
+
+```csharp
+using SolarSharp.Interpreter.DataTypes;
+
+Script script = new Script();
+
+// Load a Lua function
+LuaValue func = script.LoadString(@"
+    return function()
+        for i = 1, 3 do
+            print(i)
+            coroutine.yield()
+        end
+    end
+");
+
+LuaValue luaFunc = script.Call(func);
+
+// Create coroutine from Lua function
+LuaValue coroutine = script.CreateCoroutine(luaFunc);
+
+Console.WriteLine(coroutine.Type); // DataType.Thread
+```
+
+### From Lua
+
+```csharp
+script.DoString(@"
+    function myTask()
+        print('Starting...')
+        coroutine.yield()
+        print('Continuing...')
+        coroutine.yield()
+        print('Done!')
+    end
+    
+    co = coroutine.create(myTask)
+");
+
+LuaValue co = script.Globals.Get("co");
+Coroutine coroutine = co.Coroutine;
+```
+
+## Coroutine States
+
+Coroutines can be in several states:
+
+```csharp
+public enum CoroutineState
+{
+    NotStarted,  // Created but never resumed
+    Suspended,   // Yielded and can be resumed
+    Running,     // Currently executing
+    Dead         // Finished execution
+}
+```
+
+### Checking State
+
+```csharp
+Coroutine co = script.CreateCoroutine(func).Coroutine;
+
+Console.WriteLine(co.State); // CoroutineState.NotStarted
+
+co.Resume();
+Console.WriteLine(co.State); // CoroutineState.Suspended or Dead
+```
+
+## Resuming Coroutines
+
+### Basic Resume
+
+```csharp
+Script script = new Script();
+
+script.DoString(@"
+    function task()
+        for i = 1, 3 do
+            coroutine.yield(i)
+        end
+        return 'done'
+    end
+    
+    co = coroutine.create(task)
+");
+
+Coroutine co = script.Globals.Get("co").Coroutine;
+
+// Resume coroutine
+LuaValue result1 = co.Resume();
+Console.WriteLine(result1.Number); // 1
+
+LuaValue result2 = co.Resume();
+Console.WriteLine(result2.Number); // 2
+
+LuaValue result3 = co.Resume();
+Console.WriteLine(result3.Number); // 3
+
+LuaValue result4 = co.Resume();
+Console.WriteLine(result4.String); // "done"
+```
+
+### Resume with Arguments
+
+```csharp
+script.DoString(@"
+    function echo()
+        while true do
+            local msg = coroutine.yield()
+            if msg then
+                print('Received: ' .. msg)
+            end
+        end
+    end
+    
+    co = coroutine.create(echo)
+");
+
+Coroutine co = script.Globals.Get("co").Coroutine;
+
+// First resume starts the coroutine
+co.Resume();
+
+// Subsequent resumes pass values to yield
+co.Resume("Hello");  // Prints: Received: Hello
+co.Resume("World");  // Prints: Received: World
+```
+
+### Resume Overloads
+
+```csharp
+// No arguments
+LuaValue result = coroutine.Resume();
+
+// LuaValue arguments
+LuaValue result = coroutine.Resume(
+    LuaValue.NewNumber(42),
+    LuaValue.NewString("hello")
+);
+
+// CLR object arguments (auto-converted)
+LuaValue result = coroutine.Resume(42, "hello", true);
+
+// With ScriptExecutionContext (for CLR callbacks)
+LuaValue result = coroutine.Resume(context, args);
+```
+
+## Yielding from Lua
+
+Coroutines yield control back to the caller:
+
+```csharp
+script.DoString(@"
+    function producer()
+        local i = 0
+        while i < 5 do
+            i = i + 1
+            coroutine.yield(i * 10)
+        end
+    end
+    
+    co = coroutine.create(producer)
+");
+
+Coroutine co = script.Globals.Get("co").Coroutine;
+
+while (co.State != CoroutineState.Dead)
+{
+    LuaValue value = co.Resume();
+    if (value.Type == DataType.Number)
+        Console.WriteLine(value.Number); // 10, 20, 30, 40, 50
+}
+```
+
+### Yielding with Multiple Values
+
+```csharp
+script.DoString(@"
+    function multiYield()
+        coroutine.yield(1, 'one', true)
+        coroutine.yield(2, 'two', false)
+    end
+    
+    co = coroutine.create(multiYield)
+");
+
+Coroutine co = script.Globals.Get("co").Coroutine;
+
+LuaValue result = co.Resume();
+if (result.Type == DataType.Tuple)
+{
+    Console.WriteLine(result.Tuple[0].Number);   // 1
+    Console.WriteLine(result.Tuple[1].String);   // "one"
+    Console.WriteLine(result.Tuple[2].Boolean);  // true
+}
+```
+
+## Coroutine Wrap
+
+The `coroutine.wrap` function creates a function that resumes the coroutine:
+
+```csharp
+script.DoString(@"
+    function task()
+        for i = 1, 3 do
+            coroutine.yield(i)
+        end
+    end
+    
+    wrapped = coroutine.wrap(task)
+    
+    print(wrapped())  -- 1
+    print(wrapped())  -- 2
+    print(wrapped())  -- 3
+");
+```
+
+## Using Coroutines as Iterators
+
+```csharp
+script.DoString(@"
+    function range(n)
+        return coroutine.wrap(function()
+            for i = 1, n do
+                coroutine.yield(i)
+            end
+        end)
+    end
+    
+    for i in range(5) do
+        print(i)  -- 1, 2, 3, 4, 5
+    end
+");
+```
+
+## C# Enumerable Integration
+
+SolarSharp provides convenient ways to work with coroutines in C#:
+
+### AsTypedEnumerable
+
+```csharp
+script.DoString(@"
+    function countdown()
+        for i = 5, 1, -1 do
+            coroutine.yield(i)
+        end
+    end
+    
+    co = coroutine.create(countdown)
+");
+
+Coroutine co = script.Globals.Get("co").Coroutine;
+
+// Iterate as LuaValue enumerable
+foreach (LuaValue value in co.AsTypedEnumerable())
+{
+    Console.WriteLine(value.Number); // 5, 4, 3, 2, 1
+}
+```
+
+### AsEnumerable
+
+```csharp
+// Iterate as object enumerable (auto-converts)
+foreach (object value in co.AsEnumerable())
+{
+    Console.WriteLine(value);
+}
+```
+
+### AsEnumerable&lt;T&gt;
+
+```csharp
+// Iterate with specific type
+foreach (int number in co.AsEnumerable<int>())
+{
+    Console.WriteLine(number);
+}
+```
+
+### Unity Coroutine Integration
+
+```csharp
+// Convert to Unity coroutine
+IEnumerator unityCoroutine = co.AsUnityCoroutine();
+StartCoroutine(unityCoroutine);
+```
+
+<Note>
+`AsUnityCoroutine()` returns `null` for each `yield`, making it compatible with Unity's coroutine system.
+</Note>
+
+## Coroutine Recycling
+
+For performance, you can recycle dead coroutines:
+
+```csharp
+Script script = new Script();
+
+LuaValue func = script.LoadString(@"
+    return function()
+        for i = 1, 3 do
+            coroutine.yield(i)
+        end
+    end
+");
+
+LuaValue luaFunc = script.Call(func);
+
+// Create and use coroutine
+LuaValue co1 = script.CreateCoroutine(luaFunc);
+Coroutine coroutine1 = co1.Coroutine;
+
+while (coroutine1.State != CoroutineState.Dead)
+    coroutine1.Resume();
+
+// Recycle the dead coroutine
+LuaValue co2 = script.RecycleCoroutine(coroutine1, luaFunc);
+Coroutine coroutine2 = co2.Coroutine;
+
+// Use the recycled coroutine
+while (coroutine2.State != CoroutineState.Dead)
+    coroutine2.Resume();
+```
+
+<Warning>
+Only recycle coroutines that are in the `Dead` state and were created as `CoroutineType.Coroutine`.
+</Warning>
+
+## CLR Callback Coroutines
+
+You can create coroutines from CLR callbacks:
+
+```csharp
+CallbackFunction callback = new CallbackFunction(
+    (context, args) =>
+    {
+        Console.WriteLine("CLR callback executed");
+        return LuaValue.NewString("done");
+    },
+    "myCallback"
+);
+
+LuaValue co = script.CreateCoroutine(LuaValue.NewCallback(callback));
+Coroutine coroutine = co.Coroutine;
+
+Console.WriteLine(coroutine.Type); // CoroutineType.ClrCallback
+
+LuaValue result = coroutine.Resume(context);
+Console.WriteLine(coroutine.Type); // CoroutineType.ClrCallbackDead
+```
+
+## Error Handling
+
+### Protected Resume from Lua
+
+```csharp
+script.DoString(@"
+    function errorTask()
+        coroutine.yield(1)
+        error('Something went wrong!')
+    end
+    
+    co = coroutine.create(errorTask)
+    
+    -- First resume succeeds
+    success, value = coroutine.resume(co)
+    print(success, value)  -- true, 1
+    
+    -- Second resume fails
+    success, err = coroutine.resume(co)
+    print(success, err)    -- false, error message
+");
+```
+
+### Handling Errors in C#
+
+```csharp
+using SolarSharp.Interpreter.Errors;
+
+try
+{
+    LuaValue result = coroutine.Resume();
+}
+catch (ScriptRuntimeException ex)
+{
+    Console.WriteLine($"Coroutine error: {ex.Message}");
+    Console.WriteLine($"Call stack: {ex.CallStack}");
+}
+```
+
+## CLR Boundary Limitations
+
+You cannot yield across CLR call boundaries:
+
+```csharp
+Script script = new Script();
+
+script.Globals["callback"] = (Func<LuaValue, LuaValue>)((func) =>
+{
+    // This will fail - cannot yield through CLR code
+    return script.Call(func);
+});
+
+script.DoString(@"
+    function task()
+        callback(function()
+            coroutine.yield()  -- ERROR: attempt to yield across CLR boundary
+        end)
+    end
+    
+    co = coroutine.create(task)
+");
+
+try
+{
+    Coroutine co = script.Globals.Get("co").Coroutine;
+    co.Resume();
+}
+catch (ScriptRuntimeException ex)
+{
+    Console.WriteLine(ex.Message);
+    // "attempt to yield across a CLR-call boundary"
+}
+```
+
+## Debugging Coroutines
+
+Get the call stack of a suspended coroutine:
+
+```csharp
+using SolarSharp.Interpreter.Debugging;
+
+Coroutine co = script.Globals.Get("co").Coroutine;
+
+// Resume and yield
+co.Resume();
+
+if (co.State == CoroutineState.Suspended)
+{
+    // Get the call stack
+    StackFrame[] stack = co.GetStackTrace(skip: 0);
+    
+    foreach (StackFrame frame in stack)
+    {
+        Console.WriteLine($"  at {frame.FunctionName} in {frame.Source}:{frame.Line}");
+    }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Check coroutine state before resuming">
+    ```csharp
+    if (co.State == CoroutineState.Suspended || 
+        co.State == CoroutineState.NotStarted)
+    {
+        co.Resume();
+    }
+    else if (co.State == CoroutineState.Dead)
+    {
+        Console.WriteLine("Coroutine has finished");
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Use enumerables for iteration patterns">
+    ```csharp
+    // Good - clean iteration
+    foreach (LuaValue value in coroutine.AsTypedEnumerable())
+    {
+        ProcessValue(value);
+    }
+    
+    // Less clean - manual loop
+    while (coroutine.State != CoroutineState.Dead)
+    {
+        LuaValue value = coroutine.Resume();
+        ProcessValue(value);
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Avoid yielding across CLR boundaries">
+    ```csharp
+    // Bad - will fail
+    script.Globals["dangerousCall"] = (Action)(() =>
+    {
+        script.DoString("coroutine.yield()");
+    });
+    
+    // Good - keep yield paths pure Lua
+    script.DoString(@"
+        function safeYield()
+            coroutine.yield()
+        end
+    ");
+    ```
+  </Accordion>
+  
+  <Accordion title="Recycle coroutines for better performance">
+    ```csharp
+    // Pool of coroutines
+    Queue<Coroutine> deadCoroutines = new Queue<Coroutine>();
+    
+    void ReturnCoroutine(Coroutine co)
+    {
+        if (co.State == CoroutineState.Dead)
+            deadCoroutines.Enqueue(co);
+    }
+    
+    Coroutine GetCoroutine(LuaValue func)
+    {
+        if (deadCoroutines.Count > 0)
+        {
+            Coroutine recycled = deadCoroutines.Dequeue();
+            return script.RecycleCoroutine(recycled, func).Coroutine;
+        }
+        return script.CreateCoroutine(func).Coroutine;
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Common Patterns
+
+### Producer-Consumer
+
+```csharp
+script.DoString(@"
+    function producer()
+        for i = 1, 10 do
+            coroutine.yield(i * i)
+        end
+    end
+    
+    co = coroutine.create(producer)
+");
+
+Coroutine producer = script.Globals.Get("co").Coroutine;
+
+foreach (LuaValue value in producer.AsTypedEnumerable())
+{
+    Console.WriteLine($"Consumed: {value.Number}");
+}
+```
+
+### State Machine
+
+```csharp
+script.DoString(@"
+    function stateMachine()
+        print('State: Init')
+        coroutine.yield()
+        
+        print('State: Running')
+        coroutine.yield()
+        
+        print('State: Cleanup')
+        coroutine.yield()
+        
+        print('State: Done')
+    end
+    
+    sm = coroutine.create(stateMachine)
+");
+
+Coroutine sm = script.Globals.Get("sm").Coroutine;
+
+while (sm.State != CoroutineState.Dead)
+{
+    sm.Resume();
+    System.Threading.Thread.Sleep(1000); // Wait between states
+}
+```
+
+### Async Task Simulation
+
+```csharp
+script.DoString(@"
+    function asyncTask(name, duration)
+        print(name .. ' started')
+        for i = 1, duration do
+            coroutine.yield()
+        end
+        print(name .. ' completed')
+        return name .. ' result'
+    end
+    
+    task1 = coroutine.create(function() return asyncTask('Task1', 3) end)
+    task2 = coroutine.create(function() return asyncTask('Task2', 2) end)
+");
+
+Coroutine task1 = script.Globals.Get("task1").Coroutine;
+Coroutine task2 = script.Globals.Get("task2").Coroutine;
+
+List<Coroutine> tasks = new List<Coroutine> { task1, task2 };
+
+while (tasks.Any(t => t.State != CoroutineState.Dead))
+{
+    foreach (var task in tasks.ToList())
+    {
+        if (task.State != CoroutineState.Dead)
+        {
+            LuaValue result = task.Resume();
+            if (task.State == CoroutineState.Dead && result.Type == DataType.String)
+            {
+                Console.WriteLine($"Result: {result.String}");
+            }
+        }
+    }
+}
+```
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Functions" href="/core-concepts/functions" icon="function">
+    Understanding function calls and returns
+  </Card>
+  <Card title="Script Execution" href="/core-concepts/script-execution" icon="play">
+    Loading and running Lua code
+  </Card>
+  <Card title="Error Handling" href="/guides/error-handling" icon="triangle-exclamation">
+    Managing errors in coroutines
+  </Card>
+  <Card title="Performance" href="/advanced/performance" icon="gauge-high">
+    Optimizing coroutine usage
+  </Card>
+</CardGroup>

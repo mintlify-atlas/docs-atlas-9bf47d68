@@ -1,0 +1,467 @@
+---
+title: Type Converters
+description: Customize type conversion between Lua and CLR types
+---
+
+SolarSharp's type conversion system handles the translation between Lua values and CLR types. Custom converters allow you to define how specific types are converted, enabling seamless integration of custom types and specialized conversion logic.
+
+## Understanding Type Conversion
+
+Type conversion happens automatically in several scenarios:
+
+- When calling C# methods from Lua
+- When calling Lua functions from C#
+- When setting properties or fields
+- When returning values between Lua and C#
+
+SolarSharp provides default conversion logic for common types, but you can override this behavior with custom converters.
+
+## Default Conversions
+
+### Lua to CLR (Script to CLR)
+
+| Lua Type | CLR Types |
+|----------|----------|
+| `nil` | `null`, nullable types |
+| `boolean` | `bool`, `string` |
+| `number` | All numeric types (`int`, `double`, `float`, etc.), `enum`, `string` |
+| `string` | `string`, `StringBuilder`, `char` |
+| `function` | `Closure`, `ScriptFunctionDelegate` |
+| `table` | `Table`, `Dictionary<,>`, `List<>`, arrays |
+| `userdata` | The wrapped CLR object |
+
+### CLR to Lua (CLR to Script)
+
+| CLR Type | Lua Type |
+|----------|----------|
+| `null` | `nil` |
+| `bool` | `boolean` |
+| Numeric types | `number` |
+| `string`, `char`, `StringBuilder` | `string` |
+| `Table` | `table` |
+| `Closure` | `function` |
+| `CallbackFunction` | `function` |
+| `Delegate` | `function` |
+| Registered types | `userdata` |
+| `IList` | `table` |
+| `IDictionary` | `table` |
+| `IEnumerable` | Iterator function |
+
+## CustomConvertersCollection
+
+The `CustomConvertersCollection` class manages custom type converters globally:
+
+```csharp
+// Access the global converter collection
+CustomConvertersCollection converters = Script.GlobalOptions.CustomConverters;
+```
+
+<Note>
+Custom converters are global and affect all Script instances. Set them up during application initialization.
+</Note>
+
+## CLR to Script Converters
+
+Define how CLR types are converted to Lua values:
+
+### Basic Converter
+
+```csharp
+public class Color
+{
+    public byte R { get; set; }
+    public byte G { get; set; }
+    public byte B { get; set; }
+}
+
+// Register converter
+Script.GlobalOptions.CustomConverters.SetClrToScriptCustomConversion<Color>(
+    (script, color) =>
+    {
+        var table = new Table(script);
+        table["r"] = color.R;
+        table["g"] = color.G;
+        table["b"] = color.B;
+        return LuaValue.NewTable(table);
+    }
+);
+
+// Now Color objects convert to tables automatically
+var script = new Script();
+var red = new Color { R = 255, G = 0, B = 0 };
+script.Globals["redColor"] = red;
+
+script.DoString(@"
+    print(redColor.r)  -- 255
+    print(redColor.g)  -- 0
+    print(redColor.b)  -- 0
+");
+```
+
+### Non-Generic Converter
+
+```csharp
+// For types you don't have generic access to
+Script.GlobalOptions.CustomConverters.SetClrToScriptCustomConversion(
+    typeof(System.Drawing.Point),
+    (script, obj) =>
+    {
+        var point = (System.Drawing.Point)obj;
+        var table = new Table(script);
+        table["x"] = point.X;
+        table["y"] = point.Y;
+        return LuaValue.NewTable(table);
+    }
+);
+```
+
+### Complex Type Converter
+
+```csharp
+public class Vector3
+{
+    public float X, Y, Z;
+    
+    public Vector3(float x, float y, float z)
+    {
+        X = x; Y = y; Z = z;
+    }
+}
+
+Script.GlobalOptions.CustomConverters.SetClrToScriptCustomConversion<Vector3>(
+    (script, vec) =>
+    {
+        // Option 1: Convert to table
+        var table = new Table(script);
+        table["x"] = vec.X;
+        table["y"] = vec.Y;
+        table["z"] = vec.Z;
+        table["length"] = (Func<double>)(() => 
+            Math.Sqrt(vec.X * vec.X + vec.Y * vec.Y + vec.Z * vec.Z));
+        return LuaValue.NewTable(table);
+        
+        // Option 2: Convert to string representation
+        // return LuaValue.NewString($"({vec.X}, {vec.Y}, {vec.Z})");
+        
+        // Option 3: Keep as userdata (return null to use default)
+        // return null;
+    }
+);
+```
+
+## Script to CLR Converters
+
+Define how Lua values are converted to CLR types:
+
+### Basic Converter
+
+```csharp
+public class Color
+{
+    public byte R { get; set; }
+    public byte G { get; set; }
+    public byte B { get; set; }
+}
+
+// Register converter from Lua table to Color
+Script.GlobalOptions.CustomConverters.SetScriptToClrCustomConversion(
+    DataType.Table,
+    typeof(Color),
+    (dynVal) =>
+    {
+        var table = dynVal.Table;
+        return new Color
+        {
+            R = (byte)(double)table["r"],
+            G = (byte)(double)table["g"],
+            B = (byte)(double)table["b"]
+        };
+    }
+);
+
+// Now Lua tables convert to Color automatically
+var script = new Script();
+script.DoString(@"
+    function createColor(r, g, b)
+        return { r = r, g = g, b = b }
+    end
+");
+
+LuaValue result = script.Call(script.Globals["createColor"], 128, 64, 255);
+Color color = (Color)result.ToObject(typeof(Color));
+
+Console.WriteLine($"RGB: {color.R}, {color.G}, {color.B}");
+```
+
+### Multiple DataType Converters
+
+```csharp
+public class Temperature
+{
+    public double Celsius { get; set; }
+    
+    public Temperature(double celsius)
+    {
+        Celsius = celsius;
+    }
+}
+
+// Convert from number (assume Celsius)
+Script.GlobalOptions.CustomConverters.SetScriptToClrCustomConversion(
+    DataType.Number,
+    typeof(Temperature),
+    dynVal => new Temperature(dynVal.Number)
+);
+
+// Convert from string (parse with unit)
+Script.GlobalOptions.CustomConverters.SetScriptToClrCustomConversion(
+    DataType.String,
+    typeof(Temperature),
+    dynVal =>
+    {
+        string str = dynVal.String;
+        if (str.EndsWith("C"))
+        {
+            return new Temperature(double.Parse(str.TrimEnd('C')));
+        }
+        else if (str.EndsWith("F"))
+        {
+            double f = double.Parse(str.TrimEnd('F'));
+            return new Temperature((f - 32) * 5 / 9);
+        }
+        return new Temperature(0);
+    }
+);
+
+// Convert from table
+Script.GlobalOptions.CustomConverters.SetScriptToClrCustomConversion(
+    DataType.Table,
+    typeof(Temperature),
+    dynVal => new Temperature((double)dynVal.Table["celsius"])
+);
+```
+
+## Removing Converters
+
+Remove custom converters by passing `null`:
+
+```csharp
+// Remove CLR to Script converter
+Script.GlobalOptions.CustomConverters.SetClrToScriptCustomConversion<Color>(null);
+
+// Remove Script to CLR converter
+Script.GlobalOptions.CustomConverters.SetScriptToClrCustomConversion(
+    DataType.Table,
+    typeof(Color),
+    null
+);
+
+// Clear all converters
+Script.GlobalOptions.CustomConverters.Clear();
+```
+
+## Converter Priority
+
+Custom converters are checked before default conversion logic:
+
+1. **Custom converter** - If defined, used first
+2. **Default conversion** - Built-in type conversion
+3. **UserData** - For registered types
+4. **Error** - If no conversion path exists
+
+Returning `null` from a custom converter allows fallback to default behavior:
+
+```csharp
+Script.GlobalOptions.CustomConverters.SetClrToScriptCustomConversion<MyType>(
+    (script, obj) =>
+    {
+        if (obj.UseCustomConversion)
+        {
+            // Custom conversion
+            return LuaValue.NewString(obj.CustomValue);
+        }
+        
+        // Fall back to default (UserData)
+        return null;
+    }
+);
+```
+
+## Practical Examples
+
+### DateTime Conversion
+
+```csharp
+// CLR to Script: DateTime to table
+Script.GlobalOptions.CustomConverters.SetClrToScriptCustomConversion<DateTime>(
+    (script, dt) =>
+    {
+        var table = new Table(script);
+        table["year"] = dt.Year;
+        table["month"] = dt.Month;
+        table["day"] = dt.Day;
+        table["hour"] = dt.Hour;
+        table["minute"] = dt.Minute;
+        table["second"] = dt.Second;
+        return LuaValue.NewTable(table);
+    }
+);
+
+// Script to CLR: Table to DateTime
+Script.GlobalOptions.CustomConverters.SetScriptToClrCustomConversion(
+    DataType.Table,
+    typeof(DateTime),
+    dynVal =>
+    {
+        var t = dynVal.Table;
+        return new DateTime(
+            (int)(double)t["year"],
+            (int)(double)t["month"],
+            (int)(double)t["day"],
+            (int)(double)t["hour"],
+            (int)(double)t["minute"],
+            (int)(double)t["second"]
+        );
+    }
+);
+```
+
+### GUID Conversion
+
+```csharp
+// GUID to string
+Script.GlobalOptions.CustomConverters.SetClrToScriptCustomConversion<Guid>(
+    (script, guid) => LuaValue.NewString(guid.ToString())
+);
+
+// String to GUID
+Script.GlobalOptions.CustomConverters.SetScriptToClrCustomConversion(
+    DataType.String,
+    typeof(Guid),
+    dynVal => Guid.Parse(dynVal.String)
+);
+```
+
+### Enum as String
+
+```csharp
+public enum GameState
+{
+    Menu,
+    Playing,
+    Paused,
+    GameOver
+}
+
+// Enum to string
+Script.GlobalOptions.CustomConverters.SetClrToScriptCustomConversion<GameState>(
+    (script, state) => LuaValue.NewString(state.ToString())
+);
+
+// String to enum
+Script.GlobalOptions.CustomConverters.SetScriptToClrCustomConversion(
+    DataType.String,
+    typeof(GameState),
+    dynVal => Enum.Parse<GameState>(dynVal.String)
+);
+```
+
+### Collection Conversion
+
+```csharp
+public class Inventory
+{
+    public List<string> Items { get; set; } = new();
+}
+
+// Inventory to table
+Script.GlobalOptions.CustomConverters.SetClrToScriptCustomConversion<Inventory>(
+    (script, inv) =>
+    {
+        var table = new Table(script);
+        for (int i = 0; i < inv.Items.Count; i++)
+        {
+            table[i + 1] = inv.Items[i];
+        }
+        return LuaValue.NewTable(table);
+    }
+);
+
+// Table to Inventory
+Script.GlobalOptions.CustomConverters.SetScriptToClrCustomConversion(
+    DataType.Table,
+    typeof(Inventory),
+    dynVal =>
+    {
+        var inv = new Inventory();
+        foreach (var pair in dynVal.Table.Pairs)
+        {
+            if (pair.Value.Type == DataType.String)
+            {
+                inv.Items.Add(pair.Value.String);
+            }
+        }
+        return inv;
+    }
+);
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Set Up Converters Early">
+    Register all custom converters during application initialization, before creating Script instances.
+  </Step>
+  
+  <Step title="Handle Null and Edge Cases">
+    Always validate input in converters and handle null/invalid cases gracefully.
+  </Step>
+  
+  <Step title="Document Converter Behavior">
+    Clearly document what Lua format your converters expect and produce.
+  </Step>
+  
+  <Step title="Consider Both Directions">
+    If you convert CLR to Script, also implement Script to CLR for symmetry.
+  </Step>
+  
+  <Step title="Test Thoroughly">
+    Test converters with various input types and edge cases to ensure robustness.
+  </Step>
+</Steps>
+
+<Warning>
+Custom converters affect all Script instances globally. Ensure your converters are thread-safe if you use scripts across multiple threads.
+</Warning>
+
+## Conversion Weights
+
+When SolarSharp resolves overloaded methods, it assigns weights to conversions to find the best match:
+
+| Conversion | Weight |
+|-----------|--------|
+| Exact match | 100 |
+| Custom converter | 100 |
+| Nil to nullable | 100 |
+| String to StringBuilder | 99 |
+| Number downcast | 99 |
+| String to char | 98 |
+| Number to enum | 90 |
+| Table conversion | 90 |
+| Number to string | 50 |
+| Bool to string | 5 |
+| UserData to string | 5 |
+
+Custom converters receive the highest weight (100), making them preferred for overload resolution.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Calling C# from Lua" icon="code" href="/interop/calling-csharp-from-lua">
+    Learn how to expose C# to Lua scripts
+  </Card>
+  
+  <Card title="Interop Overview" icon="book" href="/interop/overview">
+    Return to interop system overview
+  </Card>
+</CardGroup>

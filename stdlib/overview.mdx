@@ -1,0 +1,126 @@
+---
+title: Standard Library Overview
+description: Overview of SolarSharp's Lua standard library implementation
+---
+
+SolarSharp provides a comprehensive implementation of the Lua standard library, organized into modular packages that can be selectively enabled using the `CoreModules` enum.
+
+## CoreModules Enum
+
+The `CoreModules` enum allows fine-grained control over which standard library modules are loaded into your script environment. This is particularly useful for sandboxing and security.
+
+### Basic Modules
+
+| Module | Description | Flag |
+|--------|-------------|------|
+| **Basic** | Core functions like `print`, `type`, `tostring`, `assert` | `CoreModules.Basic` |
+| **GlobalConsts** | Global constants: `_G`, `_VERSION`, `_SOLARSHARP` | `CoreModules.GlobalConsts` |
+| **TableIterators** | Iterator functions: `next`, `ipairs`, `pairs` | `CoreModules.TableIterators` |
+| **Metatables** | Metatable operations: `setmetatable`, `getmetatable`, `rawset`, `rawget`, `rawequal`, `rawlen` | `CoreModules.Metatables` |
+| **ErrorHandling** | Error handling: `pcall`, `xpcall` | `CoreModules.ErrorHandling` |
+
+### Package Modules
+
+| Module | Description | Flag |
+|--------|-------------|------|
+| **String** | String manipulation functions | `CoreModules.String` |
+| **Table** | Table manipulation functions | `CoreModules.Table` |
+| **Math** | Mathematical functions and constants | `CoreModules.Math` |
+| **Coroutine** | Coroutine creation and management | `CoreModules.Coroutine` |
+| **Bit32** | Bitwise operations | `CoreModules.Bit32` |
+| **IO** | File I/O operations | `CoreModules.IO` |
+| **OS_Time** | Time and date functions | `CoreModules.OS_Time` |
+| **OS_System** | System operations (not available in Unity) | `CoreModules.OS_System` |
+| **Debug** | Debugging utilities (limited support) | `CoreModules.Debug` |
+| **Json** | JSON parsing and serialization (SolarSharp extension) | `CoreModules.Json` |
+
+### LoadMethods
+
+| Flag | Description |
+|------|-------------|
+| **LoadMethods** | Dynamic loading: `load`, `loadsafe`, `loadfile`, `loadfilesafe`, `dofile`, `require` |
+
+## Presets
+
+SolarSharp provides convenient presets for common use cases:
+
+### Preset_HardSandbox
+```csharp
+CoreModules.Preset_HardSandbox = 
+    GlobalConsts | TableIterators | String | Table | Basic | Math | Bit32
+```
+A restrictive sandbox with only pure computation capabilities. Suitable for untrusted code.
+
+### Preset_SoftSandbox
+```csharp
+CoreModules.Preset_SoftSandbox = 
+    Preset_HardSandbox | Metatables | ErrorHandling | 
+    Coroutine | OS_Time | Json
+```
+Adds metaprogramming, coroutines, time functions, and JSON support while still restricting file and system access.
+
+### Preset_Default
+```csharp
+CoreModules.Preset_Default = 
+    Preset_SoftSandbox | LoadMethods | OS_System | IO
+```
+Includes everything except debug module. **Warning: Allows unlimited system access.**
+
+### Preset_Complete
+```csharp
+CoreModules.Preset_Complete = Preset_Default | Debug
+```
+The complete standard library including debug utilities. **Warning: Allows unlimited system access.**
+
+## Usage Example
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Modules;
+
+// Create a sandboxed script
+var script = new Script(CoreModules.Preset_SoftSandbox);
+
+// Or use specific modules
+var customScript = new Script(
+    CoreModules.Basic | 
+    CoreModules.String | 
+    CoreModules.Math | 
+    CoreModules.Json
+);
+
+// Full standard library
+var fullScript = new Script(CoreModules.Preset_Complete);
+```
+
+## Important Notes
+
+### UTF-16 vs UTF-8
+
+SolarSharp runs on .NET, which uses UTF-16 for strings internally. This differs from standard Lua's UTF-8 encoding:
+
+- String length is measured in UTF-16 code units, not bytes
+- The `string.byte()` function returns UTF-16 code unit values
+- Pattern matching operates on UTF-16 characters
+
+This is generally transparent for ASCII text but may affect behavior with Unicode characters.
+
+### Platform Limitations
+
+- **IO** and **OS_System** modules are not supported under Unity
+- Some debug functionality is platform-dependent
+- File operations require appropriate platform access configuration
+
+## Next Steps
+
+Explore the individual module documentation:
+
+- [Basic Functions](/stdlib/basic)
+- [String Module](/stdlib/string)
+- [Table Module](/stdlib/table)
+- [Math Module](/stdlib/math)
+- [IO Module](/stdlib/io)
+- [OS Module](/stdlib/os)
+- [Coroutine Module](/stdlib/coroutine)
+- [Debug Module](/stdlib/debug)
+- [JSON Module](/stdlib/json)

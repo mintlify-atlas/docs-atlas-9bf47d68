@@ -1,0 +1,136 @@
+---
+title: "Introduction to SolarSharp"
+description: "A complete Lua solution written entirely in C# for .NET, Mono, and Unity3D platforms"
+---
+
+# Welcome to SolarSharp
+
+SolarSharp is a modernized, high-performance Lua interpreter written entirely in C# for the .NET ecosystem. It provides a complete Lua 5.2 implementation with excellent compatibility, modern C# features, and significant performance improvements.
+
+## What is SolarSharp?
+
+SolarSharp is a fork of MoonSharp that takes advantage of modern .NET capabilities:
+
+- Built on .NET Standard 2.1 to leverage modern C# features
+- Performance improvements across the interpreter & parser
+- Bug fixes and enhanced stability
+- Full Lua 5.2 compatibility (except weak tables)
+
+<Note>
+  SolarSharp is perfect for embedding Lua scripting in .NET applications, Unity games, and other .NET-based platforms.
+</Note>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Easy to Use" icon="rocket">
+    Simple API that lets you run Lua scripts with just a few lines of C# code.
+  </Card>
+  
+  <Card title="High Performance" icon="gauge-high">
+    Optimized interpreter with performance improvements over the original implementation.
+  </Card>
+  
+  <Card title="Cross-Platform" icon="globe">
+    Runs on .NET Core, Unity3D, iOS (AOT), IL2CPP, and many other platforms.
+  </Card>
+  
+  <Card title="Rich Interop" icon="link">
+    Easy and performant interop with CLR objects, methods, properties, and more.
+  </Card>
+  
+  <Card title="Full Standard Library" icon="book">
+    Complete Lua standard library with very few exceptions.
+  </Card>
+  
+  <Card title="Coroutine Support" icon="arrows-spin">
+    Full coroutine support, including invocation as C# iterators.
+  </Card>
+  
+  <Card title="Bytecode Support" icon="file-binary">
+    Dump and load bytecode for obfuscation and faster parsing.
+  </Card>
+  
+  <Card title="JSON Parser" icon="code">
+    Embedded JSON parser to convert between JSON and Lua tables.
+  </Card>
+</CardGroup>
+
+## Getting Started
+
+Ready to start using SolarSharp? Follow our quickstart guide to get up and running in minutes.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Get started with SolarSharp in under 5 minutes
+  </Card>
+  
+  <Card title="Installation" icon="download" href="/installation">
+    Install SolarSharp via NuGet in your project
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/script">
+    Explore the complete API documentation
+  </Card>
+  
+  <Card title="Core Concepts" icon="book-open" href="/core-concepts/script-execution">
+    Learn about key concepts and architecture
+  </Card>
+</CardGroup>
+
+## Why SolarSharp?
+
+### Modern C# Features
+
+Built on .NET Standard 2.1, SolarSharp takes full advantage of modern C# language features and runtime optimizations that weren't available in the original MoonSharp codebase.
+
+### Performance Focused
+
+Significant performance improvements have been made across the interpreter and parser. Check out our [performance benchmarks](https://braedonwooding.github.io/solarsharp/dev/bench/) to see the improvements.
+
+### Battle-Tested
+
+As a modernized version of MoonSharp, SolarSharp inherits years of stability and bug fixes while adding new improvements and optimizations.
+
+### Flexible Sandboxing
+
+Easy opt-out of Lua standard library modules allows you to sandbox what scripts can access, making it safe to run untrusted code.
+
+## Platform Support
+
+SolarSharp runs on a wide variety of platforms:
+
+- .NET Standard 2.0 and 2.1
+- .NET 9.0 and later
+- Unity3D (including IL2CPP)
+- Xamarin
+- iOS (Ahead-of-time compilation)
+- And many more .NET platforms
+
+<Tip>
+  No external dependencies are required - SolarSharp is implemented with as few dependencies as possible.
+</Tip>
+
+## License
+
+SolarSharp is released under a 3-clause BSD license, making it free to use in both commercial and open-source projects.
+
+## Next Steps
+
+<Steps>
+  <Step title="Install SolarSharp">
+    Add SolarSharp to your project via NuGet - [Installation Guide](/installation)
+  </Step>
+  
+  <Step title="Run Your First Script">
+    Follow our quickstart to execute your first Lua script - [Quickstart](/quickstart)
+  </Step>
+  
+  <Step title="Explore the API">
+    Learn about the Script class and core APIs - [API Reference](/api/script)
+  </Step>
+  
+  <Step title="Master Advanced Features">
+    Dive into CLR interop, coroutines, and more - [Core Concepts](/core-concepts/script-execution)
+  </Step>
+</Steps>

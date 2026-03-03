@@ -1,0 +1,359 @@
+---
+title: Table Module
+description: Table manipulation functions in SolarSharp
+---
+
+The Table module (`CoreModules.Table`) provides functions for manipulating Lua tables, which serve as arrays, dictionaries, and objects in Lua.
+
+## Array Functions
+
+### table.insert(list, [pos,] value)
+
+Inserts an element into a table array.
+
+```lua
+local t = {"a", "b", "c"}
+
+-- Insert at end
+table.insert(t, "d")
+-- t = {"a", "b", "c", "d"}
+
+-- Insert at position
+table.insert(t, 2, "x")
+-- t = {"a", "x", "b", "c", "d"}
+```
+
+**Parameters:**
+- `list` - The table to modify
+- `pos` - Optional insertion position (default: end of array)
+- `value` - Value to insert
+
+**Errors:**
+- Position out of bounds (< 1 or > #list + 1)
+- Wrong number of arguments
+
+### table.remove(list [, pos])
+
+Removes and returns an element from a table array.
+
+```lua
+local t = {"a", "b", "c", "d"}
+
+local removed = table.remove(t, 2)
+print(removed)  -- "b"
+-- t = {"a", "c", "d"}
+
+-- Remove last element
+local last = table.remove(t)
+print(last)  -- "d"
+-- t = {"a", "c"}
+```
+
+**Parameters:**
+- `list` - The table to modify
+- `pos` - Optional position (default: end of array)
+
+**Returns:** The removed element
+
+### table.pack(...)
+
+Creates a table with all arguments, including a count.
+
+```lua
+local t = table.pack("a", "b", "c")
+-- t = {[1] = "a", [2] = "b", [3] = "c", n = 3}
+
+print(t.n)  -- 3
+print(t[1]) -- "a"
+
+-- Handles nil values
+local t2 = table.pack(1, nil, 3)
+print(t2.n)  -- 3 (includes nil)
+print(t2[2]) -- nil
+```
+
+**Returns:** Table with elements at indices 1..n and field `n` with the count
+
+### table.unpack(list [, i [, j]])
+
+Returns elements from a table as multiple return values.
+
+```lua
+local t = {"a", "b", "c", "d"}
+
+print(table.unpack(t))       -- "a" "b" "c" "d"
+print(table.unpack(t, 2))    -- "b" "c" "d"
+print(table.unpack(t, 2, 3)) -- "b" "c"
+```
+
+**Parameters:**
+- `list` - The table to unpack
+- `i` - Start index (default: 1)
+- `j` - End index (default: `#list`)
+
+**Global Alias:** Also available as global `unpack()` function.
+
+## String Functions
+
+### table.concat(list [, sep [, i [, j]]])
+
+Concatenates table elements into a string.
+
+```lua
+local t = {"Hello", "World", "Lua"}
+
+print(table.concat(t))           -- "HelloWorldLua"
+print(table.concat(t, " "))      -- "Hello World Lua"
+print(table.concat(t, ", "))     -- "Hello, World, Lua"
+print(table.concat(t, "-", 2, 3)) -- "World-Lua"
+```
+
+**Parameters:**
+- `list` - Table with string or number elements
+- `sep` - Separator string (default: `""`)
+- `i` - Start index (default: 1)
+- `j` - End index (default: `#list`)
+
+**Returns:** Concatenated string
+
+**Error:** Raises error if table contains non-string/non-number values.
+
+## Sorting
+
+### table.sort(list [, comp])
+
+Sorts table elements in-place.
+
+```lua
+local t = {3, 1, 4, 1, 5, 9, 2, 6}
+table.sort(t)
+print(table.concat(t, ", "))  -- "1, 1, 2, 3, 4, 5, 6, 9"
+
+-- Descending order
+table.sort(t, function(a, b) return a > b end)
+print(table.concat(t, ", "))  -- "9, 6, 5, 4, 3, 2, 1, 1"
+
+-- Sort objects
+local people = {
+    {name = "Alice", age = 30},
+    {name = "Bob", age = 25},
+    {name = "Charlie", age = 35}
+}
+
+table.sort(people, function(a, b)
+    return a.age < b.age
+end)
+
+for _, person in ipairs(people) do
+    print(person.name, person.age)
+end
+-- Bob 25
+-- Alice 30
+-- Charlie 35
+```
+
+**Parameters:**
+- `list` - Table to sort
+- `comp` - Optional comparison function `(a, b) -> boolean`
+  - Should return `true` if `a` should come before `b`
+  - Default: `a < b` using `<` operator or `__lt` metamethod
+
+**Notes:**
+- Modifies the table in-place
+- Uses the `__lt` metamethod if available
+- Sort is not guaranteed to be stable
+
+## Length Calculation
+
+The table module respects the `__len` metamethod when determining table length:
+
+```lua
+local t = {1, 2, 3}
+setmetatable(t, {
+    __len = function(self)
+        return 100  -- Custom length
+    end
+})
+
+print(table.unpack(t))  -- Uses custom __len metamethod
+```
+
+All table functions that need to determine length (`concat`, `unpack`, `insert`, `remove`) will call the `__len` metamethod if present.
+
+## Comparison with __lt Metamethod
+
+The `table.sort()` function respects the `__lt` (less than) metamethod:
+
+```lua
+local Point = {}
+Point.__index = Point
+
+function Point.new(x, y)
+    local self = setmetatable({}, Point)
+    self.x = x
+    self.y = y
+    return self
+end
+
+function Point:__lt(other)
+    -- Sort by distance from origin
+    local dist1 = self.x^2 + self.y^2
+    local dist2 = other.x^2 + other.y^2
+    return dist1 < dist2
+end
+
+local points = {
+    Point.new(3, 4),
+    Point.new(1, 1),
+    Point.new(2, 2)
+}
+
+table.sort(points)  -- Uses Point:__lt metamethod
+```
+
+## Global Functions
+
+SolarSharp provides global aliases for `pack` and `unpack` (Lua 5.1 compatibility):
+
+```lua
+-- These are equivalent:
+table.pack(1, 2, 3)
+pack(1, 2, 3)
+
+table.unpack({1, 2, 3})
+unpack({1, 2, 3})
+```
+
+## Examples
+
+### Queue Implementation
+
+```lua
+local Queue = {}
+Queue.__index = Queue
+
+function Queue.new()
+    return setmetatable({}, Queue)
+end
+
+function Queue:push(value)
+    table.insert(self, value)
+end
+
+function Queue:pop()
+    if #self > 0 then
+        return table.remove(self, 1)
+    end
+end
+
+function Queue:isEmpty()
+    return #self == 0
+end
+```
+
+### Stack Implementation
+
+```lua
+local Stack = {}
+Stack.__index = Stack
+
+function Stack.new()
+    return setmetatable({}, Stack)
+end
+
+function Stack:push(value)
+    table.insert(self, value)
+end
+
+function Stack:pop()
+    if #self > 0 then
+        return table.remove(self)
+    end
+end
+
+function Stack:peek()
+    return self[#self]
+end
+```
+
+### Array Utilities
+
+```lua
+-- Filter array elements
+function filter(list, predicate)
+    local result = {}
+    for i, v in ipairs(list) do
+        if predicate(v) then
+            table.insert(result, v)
+        end
+    end
+    return result
+end
+
+-- Map array elements
+function map(list, transform)
+    local result = {}
+    for i, v in ipairs(list) do
+        table.insert(result, transform(v))
+    end
+    return result
+end
+
+-- Example usage
+local numbers = {1, 2, 3, 4, 5}
+local evens = filter(numbers, function(n) return n % 2 == 0 end)
+local doubled = map(numbers, function(n) return n * 2 end)
+```
+
+### CSV to Table
+
+```lua
+function parseCSV(csv)
+    local rows = {}
+    for line in string.gmatch(csv, "[^\n]+") do
+        local fields = {}
+        for field in string.gmatch(line, "[^,]+") do
+            table.insert(fields, field)
+        end
+        table.insert(rows, fields)
+    end
+    return rows
+end
+```
+
+### Pretty Print Table
+
+```lua
+function printTable(t, indent)
+    indent = indent or 0
+    local prefix = string.rep("  ", indent)
+    
+    for k, v in pairs(t) do
+        if type(v) == "table" then
+            print(prefix .. tostring(k) .. ":")
+            printTable(v, indent + 1)
+        else
+            print(prefix .. tostring(k) .. ": " .. tostring(v))
+        end
+    end
+end
+```
+
+## C# Integration
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Modules;
+
+var script = new Script(CoreModules.Table);
+
+// Tables are accessible from C#
+var table = script.Globals.Get("myTable").Table;
+table.Set("key", DynValue.NewString("value"));
+```
+
+## See Also
+
+- [Table Iterators](/stdlib/overview#tableiterators)
+- [Metatables](/core-concepts/tables#metatables)
+- [Basic Functions](/stdlib/basic)

@@ -1,0 +1,424 @@
+---
+title: OS Module
+description: Operating system functions in SolarSharp
+---
+
+The OS module provides operating system-related functionality, split into two submodules:
+- **OS_Time** (`CoreModules.OS_Time`) - Time and date functions
+- **OS_System** (`CoreModules.OS_System`) - System operations (file management, environment, process execution)
+
+<Warning>
+The OS_System module is **not available in Unity** builds. Use OS_Time for time-related functions in Unity.
+</Warning>
+
+## Time Functions
+
+### os.clock()
+
+Returns elapsed time since script initialization.
+
+```lua
+local start = os.clock()
+-- Do some work
+for i = 1, 1000000 do end
+local elapsed = os.clock() - start
+print(string.format("Elapsed: %.3f seconds", elapsed))
+```
+
+**Returns:** Time in seconds (as a floating-point number)
+
+**Note:** Based on UTC time offset from initialization, not CPU time.
+
+### os.time([table])
+
+Returns the current time as Unix timestamp.
+
+```lua
+-- Current time
+local now = os.time()
+print(now)  -- 1709596800 (example)
+
+-- Specific date/time
+local t = os.time({
+    year = 2024,
+    month = 3,
+    day = 5,
+    hour = 14,
+    min = 30,
+    sec = 0
+})
+print(t)
+```
+
+**Table format:**
+- `year` - Year (required)
+- `month` - Month 1-12 (required)
+- `day` - Day 1-31 (required)
+- `hour` - Hour 0-23 (default: 12)
+- `min` - Minute 0-59 (default: 0)
+- `sec` - Second 0-59 (default: 0)
+
+**Returns:** Number of seconds since Unix epoch (January 1, 1970 00:00:00 UTC)
+
+### os.date([format [, time]])
+
+Formats a date/time value.
+
+```lua
+-- Current date/time
+print(os.date())  -- "Mon Mar  5 14:30:00 2024"
+
+-- Custom format
+print(os.date("%Y-%m-%d"))        -- "2024-03-05"
+print(os.date("%H:%M:%S"))        -- "14:30:00"
+print(os.date("%Y-%m-%d %H:%M:%S")) -- "2024-03-05 14:30:00"
+
+-- UTC time (prefix with !)
+print(os.date("!%Y-%m-%d %H:%M:%S"))
+
+-- Date table
+local t = os.date("*t")
+print(t.year, t.month, t.day)
+print(t.hour, t.min, t.sec)
+print(t.wday)   -- Day of week (1=Sunday)
+print(t.yday)   -- Day of year (1-366)
+print(t.isdst)  -- Daylight saving time flag
+```
+
+**Format Specifiers:**
+
+| Code | Description | Example |
+|------|-------------|--------|
+| `%a` | Abbreviated weekday | Mon |
+| `%A` | Full weekday | Monday |
+| `%b`, `%h` | Abbreviated month | Mar |
+| `%B` | Full month | March |
+| `%c` | Date and time | Mon Mar  5 14:30:00 2024 |
+| `%C` | Century | 20 |
+| `%d` | Day of month (01-31) | 05 |
+| `%D` | Short date (MM/DD/YY) | 03/05/24 |
+| `%e` | Day of month ( 1-31) |  5 |
+| `%F` | ISO 8601 date | 2024-03-05 |
+| `%g` | Year (2 digits) | 24 |
+| `%G` | Year (4 digits) | 2024 |
+| `%H` | Hour (00-23) | 14 |
+| `%I` | Hour (01-12) | 02 |
+| `%j` | Day of year (001-366) | 065 |
+| `%m` | Month (01-12) | 03 |
+| `%M` | Minute (00-59) | 30 |
+| `%p` | AM/PM | PM |
+| `%r` | 12-hour time | 02:30:00 PM |
+| `%R` | 24-hour time (HH:MM) | 14:30 |
+| `%S` | Second (00-59) | 00 |
+| `%T` | Time (HH:MM:SS) | 14:30:00 |
+| `%u` | Weekday (1-7, 1=Monday) | 1 |
+| `%w` | Weekday (0-6, 0=Sunday) | 1 |
+| `%x` | Preferred date | 3/5/2024 |
+| `%X` | Preferred time | 2:30:00 PM |
+| `%y` | Year (2 digits) | 24 |
+| `%Y` | Year (4 digits) | 2024 |
+| `%z` | Timezone offset | +00:00 |
+| `%Z` | Timezone name | GMT |
+| `%%` | Literal % | % |
+| `%n` | Newline | \n |
+| `%t` | Tab | \t |
+
+**Special Formats:**
+- `"*t"` - Returns a table with date components
+- `"!"` prefix - Use UTC instead of local time
+
+### os.difftime(t2 [, t1])
+
+Calculates the difference between two times.
+
+```lua
+local t1 = os.time()
+-- Do some work
+for i = 1, 1000000 do end
+local t2 = os.time()
+local diff = os.difftime(t2, t1)
+print(string.format("Elapsed: %.2f seconds", diff))
+
+-- If t1 is omitted, returns t2
+print(os.difftime(100))  -- 100
+```
+
+**Returns:** Difference in seconds (t2 - t1)
+
+## System Functions
+
+<Warning>
+These functions are part of `CoreModules.OS_System` and are **not available in Unity**.
+</Warning>
+
+### os.execute([command])
+
+Executes a system command.
+
+```lua
+-- Check if shell is available
+if os.execute() then
+    print("Shell available")
+end
+
+-- Execute command
+local status, reason, code = os.execute("dir")
+print(status, reason, code)
+```
+
+**Parameters:**
+- `command` - Command to execute (nil to check availability)
+
+**Returns:** 
+- `nil` or status
+- `"exit"` - Reason string
+- Exit code number
+
+**Note:** Delegates to the platform's `IPlatformAccessor.OS_Execute()` method.
+
+### os.exit([code])
+
+Terminates the host application.
+
+```lua
+os.exit(0)   -- Exit with success code
+os.exit(1)   -- Exit with error code
+```
+
+**Parameters:**
+- `code` - Exit code (default: 0)
+
+**Warning:** This terminates the entire host process, not just the script!
+
+### os.getenv(varname)
+
+Gets an environment variable.
+
+```lua
+local path = os.getenv("PATH")
+print(path)
+
+local user = os.getenv("USERNAME") or os.getenv("USER")
+print("User: " .. (user or "unknown"))
+
+local temp = os.getenv("TEMP") or os.getenv("TMPDIR")
+print("Temp directory: " .. (temp or "unknown"))
+```
+
+**Returns:** Environment variable value, or `nil` if not set
+
+### os.remove(filename)
+
+Deletes a file.
+
+```lua
+local ok, err = os.remove("tempfile.txt")
+if ok then
+    print("File deleted")
+else
+    print("Error: " .. err)
+end
+```
+
+**Returns:** 
+- `true` on success
+- `nil, error_message, error_code` on failure
+
+### os.rename(oldname, newname)
+
+Renames or moves a file.
+
+```lua
+local ok, err = os.rename("old.txt", "new.txt")
+if ok then
+    print("File renamed")
+else
+    print("Error: " .. err)
+end
+
+-- Move file to different directory
+os.rename("file.txt", "backup/file.txt")
+```
+
+**Returns:**
+- `true` on success
+- `nil, error_message, error_code` on failure
+
+### os.tmpname()
+
+Generates a temporary filename.
+
+```lua
+local tempfile = os.tmpname()
+print(tempfile)
+
+local file = io.open(tempfile, "w")
+file:write("temporary data")
+file:close()
+
+-- Clean up
+os.remove(tempfile)
+```
+
+**Returns:** String with temporary filename
+
+**Note:** Only generates the name; doesn't create the file.
+
+### os.setlocale(locale [, category])
+
+Sets the locale.
+
+```lua
+local current = os.setlocale()
+print(current)  -- "n/a" (not fully supported)
+```
+
+**Note:** This is largely a stub in SolarSharp and returns `"n/a"`.
+
+## Examples
+
+### Measure Execution Time
+
+```lua
+function benchmark(func, iterations)
+    local start = os.clock()
+    for i = 1, iterations do
+        func()
+    end
+    local elapsed = os.clock() - start
+    return elapsed
+end
+
+local time = benchmark(function()
+    local sum = 0
+    for i = 1, 1000 do
+        sum = sum + i
+    end
+end, 1000)
+
+print(string.format("Took %.3f seconds", time))
+```
+
+### Log with Timestamp
+
+```lua
+function log(message)
+    local timestamp = os.date("%Y-%m-%d %H:%M:%S")
+    print(string.format("[%s] %s", timestamp, message))
+end
+
+log("Application started")
+log("Processing data")
+log("Application finished")
+```
+
+### Calculate Age
+
+```lua
+function calculateAge(birthYear, birthMonth, birthDay)
+    local now = os.date("*t")
+    local age = now.year - birthYear
+    
+    -- Adjust if birthday hasn't occurred this year
+    if now.month < birthMonth or 
+       (now.month == birthMonth and now.day < birthDay) then
+        age = age - 1
+    end
+    
+    return age
+end
+
+print(calculateAge(1990, 5, 15))  -- Age as of current date
+```
+
+### Timeout Implementation
+
+```lua
+function withTimeout(func, timeout)
+    local start = os.clock()
+    local result
+    
+    while os.clock() - start < timeout do
+        result = func()
+        if result then
+            return result
+        end
+    end
+    
+    return nil, "timeout"
+end
+```
+
+### File Backup with Timestamp
+
+```lua
+function backupFile(filename)
+    local timestamp = os.date("%Y%m%d_%H%M%S")
+    local backup = filename .. "." .. timestamp .. ".bak"
+    
+    local ok, err = os.rename(filename, backup)
+    if ok then
+        print("Backup created: " .. backup)
+        return backup
+    else
+        print("Backup failed: " .. err)
+        return nil
+    end
+end
+```
+
+### Check File Age
+
+```lua
+function isFileOlderThan(filename, seconds)
+    -- This requires os.execute or custom platform code
+    -- Simplified example:
+    local fileTime = getFileModificationTime(filename)
+    local now = os.time()
+    return os.difftime(now, fileTime) > seconds
+end
+```
+
+### Wait Function
+
+```lua
+function wait(seconds)
+    local start = os.clock()
+    while os.clock() - start < seconds do
+        -- Busy wait (not ideal for production)
+    end
+end
+
+print("Starting...")
+wait(2)
+print("2 seconds elapsed")
+```
+
+## C# Integration
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Modules;
+
+// Enable OS modules
+var script = new Script(
+    CoreModules.OS_Time |     // Time functions
+    CoreModules.OS_System     // System functions (not in Unity)
+);
+
+// Platform-specific implementations
+// Custom IPlatformAccessor can override default behavior
+```
+
+## Platform Limitations
+
+- **Unity**: Only `OS_Time` is supported
+- **os.execute**: Requires platform support for shell execution
+- **os.exit**: Terminates the entire host process
+- **Environment variables**: Platform-dependent availability
+
+## See Also
+
+- [IO Module](/stdlib/io)
+- [Math Module](/stdlib/math)
+- [Basic Functions](/stdlib/basic)

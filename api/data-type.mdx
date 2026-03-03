@@ -1,0 +1,393 @@
+---
+title: 'DataType'
+description: 'Enumeration of possible data types in SolarSharp'
+---
+
+The `DataType` enum represents all possible types that a `LuaValue` can have in SolarSharp.
+
+## Enum Values
+
+<ResponseField name="Nil" type="enum">
+  A nil value, as in Lua. Represents the absence of a value.
+  
+  ```csharp
+  if (value.Type == DataType.Nil) {
+      Console.WriteLine("Value is nil");
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="Void" type="enum">
+  A placeholder for no value. Used internally to distinguish between nil and truly absent values.
+  
+  ```csharp
+  // Void is used for missing optional parameters
+  if (value.Type == DataType.Void) {
+      // Use default value
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="Boolean" type="enum">
+  A Lua boolean (true or false).
+  
+  ```csharp
+  LuaValue val = LuaValue.True;
+  if (val.Type == DataType.Boolean) {
+      bool b = val.Boolean;
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="Number" type="enum">
+  A Lua number (always stored as double).
+  
+  ```csharp
+  LuaValue val = LuaValue.NewNumber(42.5);
+  if (val.Type == DataType.Number) {
+      double num = val.Number;
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="String" type="enum">
+  A Lua string.
+  
+  ```csharp
+  LuaValue val = LuaValue.NewString("hello");
+  if (val.Type == DataType.String) {
+      string str = val.String;
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="Function" type="enum">
+  A Lua function (closure).
+  
+  ```csharp
+  LuaValue val = script.Globals.Get("myFunction");
+  if (val.Type == DataType.Function) {
+      Closure func = val.Function;
+      func.Call();
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="Table" type="enum">
+  A Lua table.
+  
+  ```csharp
+  LuaValue val = LuaValue.NewTable(script);
+  if (val.Type == DataType.Table) {
+      Table tbl = val.Table;
+      tbl["key"] = "value";
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="Tuple" type="enum">
+  A set of multiple values (used for multiple return values).
+  
+  ```csharp
+  LuaValue val = LuaValue.NewTuple(
+      LuaValue.NewNumber(1),
+      LuaValue.NewString("two")
+  );
+  if (val.Type == DataType.Tuple) {
+      LuaValue[] values = val.Tuple;
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="UserData" type="enum">
+  A userdata reference - a wrapped CLR object.
+  
+  ```csharp
+  LuaValue val = UserData.Create(myObject);
+  if (val.Type == DataType.UserData) {
+      UserData ud = val.UserData;
+      var obj = ud.Object;
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="Thread" type="enum">
+  A coroutine handle.
+  
+  ```csharp
+  LuaValue val = script.CreateCoroutine(func);
+  if (val.Type == DataType.Thread) {
+      Coroutine co = val.Coroutine;
+      co.Resume();
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="ClrFunction" type="enum">
+  A callback function (C# function callable from Lua).
+  
+  ```csharp
+  LuaValue val = LuaValue.NewCallback((ctx, args) => {
+      return LuaValue.Nil;
+  });
+  if (val.Type == DataType.ClrFunction) {
+      CallbackFunction cb = val.Callback;
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="TailCallRequest" type="enum">
+  A request to execute a tail call (internal use).
+</ResponseField>
+
+<ResponseField name="YieldRequest" type="enum">
+  A request to yield a coroutine (internal use).
+</ResponseField>
+
+## Extension Methods
+
+<ParamField path="ToLuaTypeString" type="method">
+  Converts the DataType to the string returned by Lua's `type()` function.
+  
+  <ResponseField name="returns" type="string">
+    The Lua type name
+  </ResponseField>
+  
+  ```csharp
+  string typeName = DataType.Number.ToLuaTypeString();
+  Console.WriteLine(typeName); // "number"
+  
+  // Type names:
+  // Nil/Void -> "nil"
+  // Boolean -> "boolean"
+  // Number -> "number"
+  // String -> "string"
+  // Function/ClrFunction -> "function"
+  // Table -> "table"
+  // UserData -> "userdata"
+  // Thread -> "thread"
+  ```
+</ParamField>
+
+<ParamField path="ToErrorTypeString" type="method">
+  Converts the DataType to a string suitable for error messages.
+  
+  <ResponseField name="returns" type="string">
+    The error-friendly type name
+  </ResponseField>
+  
+  ```csharp
+  string error = DataType.Void.ToErrorTypeString();
+  Console.WriteLine(error); // "no value"
+  ```
+</ParamField>
+
+<ParamField path="CanHaveTypeMetatables" type="method">
+  Determines whether this data type can have type metatables.
+  
+  <ResponseField name="returns" type="bool">
+    True if the type can have metatables
+  </ResponseField>
+  
+  ```csharp
+  bool canHaveMT = DataType.String.CanHaveTypeMetatables();
+  Console.WriteLine(canHaveMT); // true
+  ```
+</ParamField>
+
+## Example Usage
+
+### Type Checking
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+
+var script = new Script();
+LuaValue value = script.DoString("return 42");
+
+switch (value.Type)
+{
+    case DataType.Number:
+        Console.WriteLine($"Number: {value.Number}");
+        break;
+    case DataType.String:
+        Console.WriteLine($"String: {value.String}");
+        break;
+    case DataType.Boolean:
+        Console.WriteLine($"Boolean: {value.Boolean}");
+        break;
+    case DataType.Nil:
+        Console.WriteLine("Nil value");
+        break;
+    case DataType.Table:
+        Console.WriteLine($"Table with {value.Table.Length} items");
+        break;
+    default:
+        Console.WriteLine($"Other type: {value.Type}");
+        break;
+}
+```
+
+### Type Validation
+
+```csharp
+public void ProcessValue(LuaValue value)
+{
+    if (value.Type != DataType.Number && value.Type != DataType.String)
+    {
+        throw new ArgumentException(
+            $"Expected number or string, got {value.Type.ToLuaTypeString()}"
+        );
+    }
+    
+    // Process the value
+}
+```
+
+### Type Conversion
+
+```csharp
+public object ConvertToClr(LuaValue value)
+{
+    return value.Type switch
+    {
+        DataType.Nil or DataType.Void => null,
+        DataType.Boolean => value.Boolean,
+        DataType.Number => value.Number,
+        DataType.String => value.String,
+        DataType.Table => ConvertTable(value.Table),
+        DataType.UserData => value.UserData.Object,
+        _ => throw new NotSupportedException(
+            $"Cannot convert {value.Type} to CLR object"
+        )
+    };
+}
+```
+
+### Generic Handler
+
+```csharp
+public void HandleLuaValue(LuaValue value)
+{
+    Console.WriteLine($"Type: {value.Type.ToLuaTypeString()}");
+    
+    switch (value.Type)
+    {
+        case DataType.Number:
+            HandleNumber(value.Number);
+            break;
+            
+        case DataType.String:
+            HandleString(value.String);
+            break;
+            
+        case DataType.Function:
+        case DataType.ClrFunction:
+            HandleFunction(value);
+            break;
+            
+        case DataType.Table:
+            HandleTable(value.Table);
+            break;
+            
+        case DataType.UserData:
+            HandleUserData(value.UserData);
+            break;
+            
+        case DataType.Thread:
+            HandleCoroutine(value.Coroutine);
+            break;
+            
+        case DataType.Nil:
+        case DataType.Void:
+            // Handle nil
+            break;
+    }
+}
+```
+
+### Type Metatable Check
+
+```csharp
+var script = new Script();
+
+// Check which types support metatables
+foreach (DataType type in Enum.GetValues(typeof(DataType)))
+{
+    if (type.CanHaveTypeMetatables())
+    {
+        Console.WriteLine($"{type} can have type metatables");
+    }
+}
+
+// Set a type metatable
+if (DataType.String.CanHaveTypeMetatables())
+{
+    var mt = new Table(script);
+    mt["__add"] = new CallbackFunction((ctx, args) => {
+        return LuaValue.NewString(
+            args[0].String + args[1].String
+        );
+    });
+    script.SetTypeMetatable(DataType.String, mt);
+}
+```
+
+### Tuple Handling
+
+```csharp
+var result = script.DoString("return 1, 2, 3");
+
+if (result.Type == DataType.Tuple)
+{
+    Console.WriteLine("Multiple values returned:");
+    foreach (var val in result.Tuple)
+    {
+        Console.WriteLine($"  {val.Type}: {val}");
+    }
+}
+else
+{
+    Console.WriteLine($"Single value: {result}");
+}
+```
+
+## Type Relationships
+
+```
+Lua Type Hierarchy:
+├─ Nil/Void          (absence of value)
+├─ Boolean           (true/false)
+├─ Number            (double-precision float)
+├─ String            (immutable string)
+├─ Function          (Lua function/closure)
+├─ ClrFunction       (C# callback)
+├─ Table             (associative array)
+├─ UserData          (CLR object wrapper)
+└─ Thread            (coroutine)
+
+Internal Types:
+├─ Tuple             (multiple return values)
+├─ TailCallRequest   (optimization)
+└─ YieldRequest      (coroutine control)
+```
+
+## Type Checking Patterns
+
+```csharp
+// Check if nil
+if (value.IsNil()) { /* ... */ }
+
+// Check if not nil
+if (value.IsNotNil()) { /* ... */ }
+
+// Check specific type
+if (value.Type == DataType.Number) { /* ... */ }
+
+// Check multiple types
+if (value.Type == DataType.Number || value.Type == DataType.String) { /* ... */ }
+
+// Validate and throw
+value.CheckType("myFunc", DataType.Table, argNum: 1);
+```

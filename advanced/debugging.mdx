@@ -1,0 +1,500 @@
+---
+title: 'Debugging Support'
+description: 'Debug SolarSharp scripts with error handling, stack traces, and debugging tools'
+---
+
+## Overview
+
+SolarSharp provides comprehensive debugging capabilities including detailed error messages, stack traces, and integration with the Lua `debug` library.
+
+## Error Handling
+
+### Basic Exception Handling
+
+Catch and handle script errors:
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Errors;
+
+Script script = new Script();
+
+try
+{
+    script.DoString("error('Something went wrong!')");
+}
+catch (ScriptRuntimeException ex)
+{
+    Console.WriteLine($"Error: {ex.Message}");
+    Console.WriteLine($"Decorated: {ex.DecoratedMessage}");
+    Console.WriteLine($"Instruction: {ex.InstructionPtr}");
+}
+```
+
+### Exception Types
+
+SolarSharp throws specific exception types:
+
+```csharp
+try
+{
+    script.DoString("invalid lua syntax {{{");
+}
+catch (SyntaxErrorException ex)
+{
+    Console.WriteLine($"Syntax error at {ex.DecoratedMessage}");
+}
+
+try
+{
+    script.DoString("return nil.field");
+}
+catch (ScriptRuntimeException ex)
+{
+    Console.WriteLine($"Runtime error: {ex.Message}");
+}
+
+try
+{
+    // Internal SolarSharp error (shouldn't happen)
+    script.DoString("...");
+}
+catch (InternalErrorException ex)
+{
+    Console.WriteLine($"Internal error: {ex.Message}");
+}
+```
+
+### Error Locations
+
+Get detailed error location information:
+
+```csharp
+Script script = new Script();
+
+try
+{
+    script.DoString(@"
+        function foo()
+            error('Error in foo')
+        end
+        
+        function bar()
+            foo()
+        end
+        
+        bar()
+    ", null, "myScript.lua");
+}
+catch (ScriptRuntimeException ex)
+{
+    Console.WriteLine(ex.DecoratedMessage);
+    // Output: myScript.lua:3: Error in foo
+    
+    // Get call stack
+    foreach (var frame in ex.CallStack)
+    {
+        Console.WriteLine($"  at {frame.Name} in {frame.Location}");
+    }
+}
+```
+
+## Lua pcall and xpcall
+
+Handle errors within Lua:
+
+```lua
+-- pcall: protected call
+local ok, result = pcall(function()
+    return 10 / 0
+end)
+
+if not ok then
+    print('Error:', result)
+else
+    print('Result:', result)
+end
+```
+
+```lua
+-- xpcall: extended protected call with error handler
+local function error_handler(err)
+    return 'Handled error: ' .. tostring(err)
+end
+
+local ok, result = xpcall(function()
+    error('Something bad happened')
+end, error_handler)
+
+if not ok then
+    print(result)  -- 'Handled error: Something bad happened'
+end
+```
+
+## Debug Library
+
+Enable the debug module for advanced debugging:
+
+```csharp
+Script script = new Script(CoreModules.Preset_Complete);
+// or
+Script script = new Script(CoreModules.Debug | CoreModules.Basic);
+```
+
+### Stack Inspection
+
+```lua
+function foo(a, b)
+    local info = debug.getinfo(1)  -- 1 = current function
+    print('Function name:', info.name)
+    print('Line defined:', info.linedefined)
+    print('Source:', info.source)
+end
+
+foo(10, 20)
+```
+
+### Variable Inspection
+
+```lua
+function inspect_locals()
+    local x = 10
+    local y = 20
+    
+    -- Get local variable by index
+    local name, value = debug.getlocal(1, 1)  -- 1st local of current function
+    print(name, value)  -- x  10
+    
+    -- Set local variable
+    debug.setlocal(1, 1, 99)
+    print(x)  -- 99
+end
+
+inspect_locals()
+```
+
+### Upvalue Inspection
+
+```lua
+local counter = 0
+
+function increment()
+    counter = counter + 1
+    return counter
+end
+
+-- Get upvalue
+local name, value = debug.getupvalue(increment, 1)
+print(name, value)  -- counter  0
+
+-- Set upvalue
+debug.setupvalue(increment, 1, 100)
+print(increment())  -- 101
+```
+
+### Traceback
+
+Generate stack traces:
+
+```lua
+function foo()
+    bar()
+end
+
+function bar()
+    print(debug.traceback())
+end
+
+foo()
+```
+
+Output:
+```
+stack traceback:
+    myScript.lua:6: in function 'bar'
+    myScript.lua:2: in function 'foo'
+    myScript.lua:9: in main chunk
+```
+
+## Custom Error Messages
+
+Throw detailed errors from C#:
+
+```csharp
+public class MathModule
+{
+    public static void Register(Script script)
+    {
+        Table module = new Table(script);
+        
+        module["divide"] = (Func<double, double, double>)((a, b) =>
+        {
+            if (b == 0)
+            {
+                throw new ScriptRuntimeException("division by zero")
+                {
+                    DoNotDecorateMessage = false  // Allow location decoration
+                };
+            }
+            return a / b;
+        });
+        
+        script.Globals["mathex"] = module;
+    }
+}
+
+// Usage
+Script script = new Script();
+MathModule.Register(script);
+
+try
+{
+    script.DoString("print(mathex.divide(10, 0))");
+}
+catch (ScriptRuntimeException ex)
+{
+    Console.WriteLine(ex.DecoratedMessage);
+    // Output: chunk_1:1: division by zero
+}
+```
+
+## Logging and Monitoring
+
+### Capture Print Output
+
+```csharp
+Script script = new Script();
+
+List<string> logs = new List<string>();
+
+script.Options.DebugPrint = (msg) =>
+{
+    logs.Add($"[{DateTime.Now:HH:mm:ss}] {msg}");
+    Console.WriteLine(msg);
+};
+
+script.DoString("print('Hello, World!')");
+script.DoString("print('Second message')");
+
+// logs now contains all print() calls
+foreach (var log in logs)
+{
+    Console.WriteLine(log);
+}
+```
+
+### Custom Input Handler
+
+```csharp
+Script script = new Script(CoreModules.Preset_Complete);
+
+script.Options.DebugInput = (prompt) =>
+{
+    Console.Write(prompt);
+    return Console.ReadLine();
+};
+
+script.DoString(@"
+    debug.debug()  -- Enters interactive debug mode
+");
+```
+
+## Debugging Best Practices
+
+### 1. Enable Lua Error Locations
+
+For compatibility with Lua tools:
+
+```csharp
+Script script = new Script();
+script.Options.UseLuaErrorLocations = true;
+
+// Errors now use Lua-style locations
+try
+{
+    script.DoString("error('test')", null, "script.lua");
+}
+catch (ScriptRuntimeException ex)
+{
+    Console.WriteLine(ex.DecoratedMessage);
+    // Output: script.lua:1: test
+}
+```
+
+### 2. Name Your Scripts
+
+Provide friendly names for better error messages:
+
+```csharp
+Script script = new Script();
+
+// Bad: generic names
+script.DoString("error('test')");
+// Error: chunk_0:1: test
+
+// Good: descriptive names
+script.DoString("error('test')", null, "PlayerController.lua");
+// Error: PlayerController.lua:1: test
+```
+
+### 3. Assert Preconditions
+
+```lua
+function calculate(x)
+    assert(type(x) == 'number', 'x must be a number')
+    assert(x >= 0, 'x must be non-negative')
+    return math.sqrt(x)
+end
+
+local ok, result = pcall(calculate, -5)
+if not ok then
+    print(result)  -- "x must be non-negative"
+end
+```
+
+### 4. Use Source Refs
+
+Get detailed location information from C#:
+
+```csharp
+using SolarSharp.Interpreter.Debugging;
+
+Script script = new Script();
+script.DoString(@"
+    function foo()
+        error('test')
+    end
+    foo()
+", null, "test.lua");
+
+try
+{
+    // ...
+}
+catch (ScriptRuntimeException ex)
+{
+    if (ex.CallStack != null)
+    {
+        foreach (var frame in ex.CallStack)
+        {
+            Console.WriteLine($"Function: {frame.Name}");
+            Console.WriteLine($"Location: {frame.Location}");
+            Console.WriteLine($"Line: {frame.Location.FromLine}");
+        }
+    }
+}
+```
+
+## Interactive Debugger
+
+Create a simple REPL debugger:
+
+```csharp
+public class LuaDebugger
+{
+    private readonly Script _script;
+    
+    public LuaDebugger()
+    {
+        _script = new Script(CoreModules.Preset_Complete);
+        
+        _script.Options.DebugPrint = Console.WriteLine;
+        _script.Options.DebugInput = (prompt) =>
+        {
+            Console.Write(prompt);
+            return Console.ReadLine();
+        };
+    }
+    
+    public void Run()
+    {
+        Console.WriteLine("Lua REPL - Type 'exit' to quit");
+        
+        while (true)
+        {
+            Console.Write("> ");
+            string input = Console.ReadLine();
+            
+            if (input == "exit") break;
+            
+            try
+            {
+                LuaValue result = _script.DoString(input);
+                if (result.Type != DataType.Void && result.Type != DataType.Nil)
+                {
+                    Console.WriteLine($"=> {result}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+        }
+    }
+}
+
+// Usage
+var debugger = new LuaDebugger();
+debugger.Run();
+```
+
+## Profiling with PerformanceStats
+
+Combine debugging with performance profiling:
+
+```csharp
+Script script = new Script();
+script.PerformanceStats.Enabled = true;
+
+try
+{
+    script.DoString(@"
+        local function slow_function()
+            local sum = 0
+            for i = 1, 1000000 do
+                sum = sum + i
+            end
+            return sum
+        end
+        
+        slow_function()
+    ");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Error: {ex.Message}");
+}
+finally
+{
+    Console.WriteLine("\nPerformance Report:");
+    Console.WriteLine(script.PerformanceStats.GetPerformanceLog());
+}
+```
+
+## VS Code Integration
+
+For advanced debugging, consider:
+
+1. Use the [Lua extension](https://marketplace.visualstudio.com/items?itemName=sumneko.lua)
+2. Configure `.luarc.json` for type checking
+3. Use `---@` annotations for better IDE support
+
+```lua
+---@param x number
+---@param y number
+---@return number
+function add(x, y)
+    return x + y
+end
+```
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Error Handling" icon="circle-exclamation" href="/guides/error-handling">
+    Handle script errors gracefully
+  </Card>
+  <Card title="Performance" icon="gauge-high" href="/advanced/performance">
+    Profile and optimize scripts
+  </Card>
+</CardGroup>

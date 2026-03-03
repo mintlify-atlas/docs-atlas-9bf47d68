@@ -1,0 +1,292 @@
+---
+title: 'Coroutine'
+description: 'A class representing a Lua coroutine'
+---
+
+The `Coroutine` class represents a Lua coroutine, which allows cooperative multitasking by suspending and resuming execution.
+
+## Properties
+
+<ResponseField name="Type" type="CoroutineType">
+  Gets the type of coroutine: Coroutine (Lua coroutine), ClrCallback (C# callback), ClrCallbackDead (executed C# callback), or Recycled.
+  
+  ```csharp
+  if (co.Type == Coroutine.CoroutineType.Coroutine) {
+      // It's a Lua coroutine
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="State" type="CoroutineState">
+  Gets the coroutine state: NotStarted, Suspended, Running, or Dead.
+  
+  ```csharp
+  if (co.State == CoroutineState.Suspended) {
+      co.Resume();
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="OwnerScript" type="Script">
+  Gets the script owning this coroutine.
+</ResponseField>
+
+## Resume Methods
+
+<ParamField path="Resume()" type="method">
+  Resumes the coroutine with no arguments. Only works for non-CLR coroutines.
+  
+  <ResponseField name="returns" type="LuaValue">
+    The value(s) yielded or returned by the coroutine
+  </ResponseField>
+  
+  ```csharp
+  var script = new Script();
+  var func = script.LoadString("return coroutine.yield(42)");
+  var co = script.CreateCoroutine(func);
+  
+  LuaValue result = co.Resume(); // Returns 42
+  ```
+</ParamField>
+
+<ParamField path="Resume(params LuaValue[])" type="method">
+  Resumes the coroutine with Lua arguments.
+  
+  <Expandable title="parameters">
+    <ParamField path="args" type="params LuaValue[]" required>
+      The arguments to pass to the coroutine
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The value(s) yielded or returned by the coroutine
+  </ResponseField>
+  
+  ```csharp
+  LuaValue result = co.Resume(
+      LuaValue.NewNumber(10),
+      LuaValue.NewString("hello")
+  );
+  ```
+</ParamField>
+
+<ParamField path="Resume(params object[])" type="method">
+  Resumes the coroutine with CLR arguments.
+  
+  <Expandable title="parameters">
+    <ParamField path="args" type="params object[]" required>
+      The arguments (automatically converted to LuaValues)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The value(s) yielded or returned by the coroutine
+  </ResponseField>
+  
+  ```csharp
+  LuaValue result = co.Resume(10, "hello", true);
+  ```
+</ParamField>
+
+<ParamField path="Resume(ScriptExecutionContext)" type="method">
+  Resumes the coroutine with an execution context. Works for all coroutine types.
+  
+  <Expandable title="parameters">
+    <ParamField path="context" type="ScriptExecutionContext" required>
+      The execution context
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The value(s) yielded or returned by the coroutine
+  </ResponseField>
+  
+  ```csharp
+  // Use inside a C# callback
+  LuaValue.NewCallback((ctx, args) => {
+      var co = args[0].Coroutine;
+      return co.Resume(ctx);
+  });
+  ```
+</ParamField>
+
+<ParamField path="Resume(ScriptExecutionContext, params LuaValue[])" type="method">
+  Resumes the coroutine with an execution context and arguments.
+  
+  <Expandable title="parameters">
+    <ParamField path="context" type="ScriptExecutionContext" required>
+      The execution context
+    </ParamField>
+    <ParamField path="args" type="params LuaValue[]" required>
+      The arguments to pass
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The value(s) yielded or returned by the coroutine
+  </ResponseField>
+</ParamField>
+
+## Enumeration Methods
+
+<ParamField path="AsTypedEnumerable" type="method">
+  Gets this coroutine as a typed enumerable which can be looped over for resuming. Returns results as LuaValue(s).
+  
+  <ResponseField name="returns" type="IEnumerable<LuaValue>">
+    An enumerable that resumes the coroutine on each iteration
+  </ResponseField>
+  
+  ```csharp
+  foreach (var value in co.AsTypedEnumerable()) {
+      Console.WriteLine($"Yielded: {value}");
+  }
+  ```
+</ParamField>
+
+<ParamField path="AsEnumerable" type="method">
+  Gets this coroutine as an enumerable. Returns results as System.Object (only first element of tuples).
+  
+  <ResponseField name="returns" type="IEnumerable<object>">
+    An enumerable that resumes the coroutine on each iteration
+  </ResponseField>
+  
+  ```csharp
+  foreach (object value in co.AsEnumerable()) {
+      Console.WriteLine($"Yielded: {value}");
+  }
+  ```
+</ParamField>
+
+<ParamField path="AsEnumerable<T>" type="method">
+  Gets this coroutine as a typed enumerable with automatic type conversion.
+  
+  <ResponseField name="returns" type="IEnumerable<T>">
+    An enumerable returning values of the specified type
+  </ResponseField>
+  
+  ```csharp
+  foreach (int value in co.AsEnumerable<int>()) {
+      Console.WriteLine($"Yielded number: {value}");
+  }
+  ```
+</ParamField>
+
+<ParamField path="AsUnityCoroutine" type="method">
+  Converts this coroutine to a Unity3D coroutine. Resumes each frame, discarding returned values.
+  
+  <ResponseField name="returns" type="IEnumerator">
+    An IEnumerator compatible with Unity's StartCoroutine
+  </ResponseField>
+  
+  ```csharp
+  // In Unity
+  StartCoroutine(luaCoroutine.AsUnityCoroutine());
+  ```
+</ParamField>
+
+## Debugging Methods
+
+<ParamField path="GetStackTrace" type="method">
+  Gets the coroutine stack trace for debugging purposes.
+  
+  <Expandable title="parameters">
+    <ParamField path="skip" type="int" required>
+      Number of frames to skip
+    </ParamField>
+    <ParamField path="entrySourceRef" type="SourceRef">
+      The entry source reference (optional)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="StackFrame[]">
+    Array of stack frames
+  </ResponseField>
+  
+  ```csharp
+  var frames = co.GetStackTrace(0);
+  foreach (var frame in frames) {
+      Console.WriteLine(frame.ToString());
+  }
+  ```
+</ParamField>
+
+## CoroutineType Enum
+
+<ResponseField name="Coroutine" type="enum">
+  A valid Lua coroutine.
+</ResponseField>
+
+<ResponseField name="ClrCallback" type="enum">
+  A CLR callback assigned to a coroutine.
+</ResponseField>
+
+<ResponseField name="ClrCallbackDead" type="enum">
+  A CLR callback that has already been executed.
+</ResponseField>
+
+<ResponseField name="Recycled" type="enum">
+  A recycled coroutine (for performance optimization).
+</ResponseField>
+
+## Example Usage
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+
+var script = new Script();
+
+// Create a coroutine that yields values
+script.DoString(@"
+    function counter(max)
+        for i = 1, max do
+            coroutine.yield(i)
+        end
+        return 'done'
+    end
+");
+
+var func = script.Globals.Get("counter");
+var co = script.CreateCoroutine(func);
+
+// Resume the coroutine manually
+Console.WriteLine(co.State); // NotStarted
+var result1 = co.Resume(5);
+Console.WriteLine($"Yielded: {result1.Number}"); // 1
+Console.WriteLine(co.State); // Suspended
+
+var result2 = co.Resume();
+Console.WriteLine($"Yielded: {result2.Number}"); // 2
+
+// Use as enumerable
+foreach (var value in co.AsTypedEnumerable()) {
+    Console.WriteLine($"Yielded: {value}");
+}
+// Output: 3, 4, 5, "done"
+
+// Create a new coroutine with foreach
+var co2 = script.CreateCoroutine(func);
+foreach (int num in co2.AsEnumerable<int>()) {
+    Console.WriteLine($"Number: {num}");
+    if (num >= 3) break; // Stop early
+}
+
+// Passing arguments to resume
+script.DoString(@"
+    function processor()
+        local value = coroutine.yield('ready')
+        coroutine.yield('received: ' .. value)
+        return 'finished'
+    end
+");
+
+var co3 = script.CreateCoroutine(script.Globals.Get("processor"));
+Console.WriteLine(co3.Resume().String); // "ready"
+Console.WriteLine(co3.Resume("hello").String); // "received: hello"
+Console.WriteLine(co3.Resume().String); // "finished"
+
+// Check coroutine state
+if (co3.State == CoroutineState.Dead) {
+    Console.WriteLine("Coroutine has finished");
+}
+```

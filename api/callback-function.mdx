@@ -1,0 +1,264 @@
+---
+title: 'CallbackFunction'
+description: 'A class representing a C# callback function callable from Lua'
+---
+
+The `CallbackFunction` class wraps a CLR (C#) function so it can be called from Lua scripts.
+
+## Constructor
+
+<ParamField path="CallbackFunction" type="constructor">
+  Creates a new CallbackFunction.
+  
+  <Expandable title="parameters">
+    <ParamField path="callBack" type="Func<ScriptExecutionContext, CallbackArguments, LuaValue>" required>
+      The callback function to be called
+    </ParamField>
+    <ParamField path="name" type="string">
+      The callback name, used in stack traces and debugger (optional)
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  var callback = new CallbackFunction(
+      (ctx, args) => LuaValue.NewString("Hello!"),
+      "greet"
+  );
+  ```
+</ParamField>
+
+## Properties
+
+<ResponseField name="Name" type="string">
+  Gets the name of the function.
+  
+  ```csharp
+  Console.WriteLine(callback.Name); // "greet"
+  ```
+</ResponseField>
+
+<ResponseField name="ClrCallback" type="Func<ScriptExecutionContext, CallbackArguments, LuaValue>">
+  Gets the underlying CLR callback delegate.
+</ResponseField>
+
+<ResponseField name="DefaultAccessMode" type="InteropAccessMode" static>
+  Gets or sets the default access mode used when marshalling delegates. Default, HideMembers, and BackgroundOptimized are NOT supported.
+  
+  ```csharp
+  CallbackFunction.DefaultAccessMode = InteropAccessMode.Reflection;
+  ```
+</ResponseField>
+
+## Methods
+
+<ParamField path="Invoke" type="method">
+  Invokes the callback function.
+  
+  <Expandable title="parameters">
+    <ParamField path="executionContext" type="ScriptExecutionContext" required>
+      The execution context
+    </ParamField>
+    <ParamField path="args" type="IList<LuaValue>" required>
+      The arguments
+    </ParamField>
+    <ParamField path="isMethodCall" type="bool">
+      Whether this is a method call (affects 'self' handling) (optional, default false)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The result of the callback
+  </ResponseField>
+  
+  ```csharp
+  LuaValue result = callback.Invoke(ctx, args, false);
+  ```
+</ParamField>
+
+## Static Factory Methods
+
+<ParamField path="FromDelegate" type="method" static>
+  Creates a CallbackFunction from a delegate.
+  
+  <Expandable title="parameters">
+    <ParamField path="script" type="Script" required>
+      The script context
+    </ParamField>
+    <ParamField path="del" type="Delegate" required>
+      The delegate to wrap
+    </ParamField>
+    <ParamField path="accessMode" type="InteropAccessMode">
+      The access mode (optional, defaults to DefaultAccessMode)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="CallbackFunction">
+    A CallbackFunction wrapping the delegate
+  </ResponseField>
+  
+  ```csharp
+  Func<int, int, int> add = (a, b) => a + b;
+  CallbackFunction callback = CallbackFunction.FromDelegate(script, add);
+  script.Globals["add"] = callback;
+  ```
+</ParamField>
+
+<ParamField path="FromMethodInfo" type="method" static>
+  Creates a CallbackFunction from a MethodInfo.
+  
+  <Expandable title="parameters">
+    <ParamField path="script" type="Script" required>
+      The script context
+    </ParamField>
+    <ParamField path="mi" type="MethodInfo" required>
+      The MethodInfo object
+    </ParamField>
+    <ParamField path="obj" type="object">
+      The object for instance methods, or null for static methods (optional)
+    </ParamField>
+    <ParamField path="accessMode" type="InteropAccessMode">
+      The access mode (optional)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="CallbackFunction">
+    A CallbackFunction wrapping the method
+  </ResponseField>
+  
+  ```csharp
+  var method = typeof(Console).GetMethod("WriteLine", new[] { typeof(string) });
+  var callback = CallbackFunction.FromMethodInfo(script, method);
+  script.Globals["print"] = callback;
+  ```
+</ParamField>
+
+<ParamField path="CheckCallbackSignature" type="method" static>
+  Checks if a method signature is compatible for direct callbacks.
+  
+  <Expandable title="parameters">
+    <ParamField path="mi" type="MethodInfo" required>
+      The method to check
+    </ParamField>
+    <ParamField path="requirePublicVisibility" type="bool" required>
+      Whether to require public visibility
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="bool">
+    True if the signature is compatible
+  </ResponseField>
+  
+  A compatible signature must:
+  - Take two parameters: `ScriptExecutionContext` and `CallbackArguments`
+  - Return `LuaValue`
+  - Be public (if requirePublicVisibility is true)
+  
+  ```csharp
+  public LuaValue MyCallback(ScriptExecutionContext ctx, CallbackArguments args)
+  {
+      return LuaValue.NewString("Valid signature!");
+  }
+  
+  var method = typeof(MyClass).GetMethod("MyCallback");
+  bool isValid = CallbackFunction.CheckCallbackSignature(method, true);
+  ```
+</ParamField>
+
+## Example Usage
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+using SolarSharp.Interpreter.Execution;
+
+var script = new Script();
+
+// Simple callback with lambda
+script.Globals["hello"] = new CallbackFunction(
+    (ctx, args) => {
+        return LuaValue.NewString("Hello, World!");
+    },
+    "hello"
+);
+
+script.DoString("print(hello())"); // Hello, World!
+
+// Callback with arguments
+script.Globals["add"] = new CallbackFunction(
+    (ctx, args) => {
+        double a = args[0].Number;
+        double b = args[1].Number;
+        return LuaValue.NewNumber(a + b);
+    },
+    "add"
+);
+
+var result = script.DoString("return add(10, 20)");
+Console.WriteLine(result.Number); // 30
+
+// Using FromDelegate
+Func<string, string> toUpper = s => s.ToUpper();
+script.Globals["toUpper"] = CallbackFunction.FromDelegate(script, toUpper);
+
+script.DoString(@"
+    local upper = toUpper('hello')
+    print(upper)  -- HELLO
+");
+
+// Callback with error handling
+script.Globals["divide"] = new CallbackFunction(
+    (ctx, args) => {
+        double a = args[0].Number;
+        double b = args[1].Number;
+        
+        if (b == 0)
+            throw new ScriptRuntimeException("Division by zero");
+        
+        return LuaValue.NewNumber(a / b);
+    },
+    "divide"
+);
+
+// Using CallbackArguments helpers
+script.Globals["processUser"] = new CallbackFunction(
+    (ctx, args) => {
+        // Type checking with AsType
+        string name = args.AsType(0, "processUser", DataType.String).String;
+        int age = args.AsInt(1, "processUser");
+        bool active = args.AsOptBoolean(2, "processUser") ?? true;
+        
+        Console.WriteLine($"User: {name}, Age: {age}, Active: {active}");
+        return LuaValue.Nil;
+    },
+    "processUser"
+);
+
+script.DoString("processUser('Alice', 30, false)");
+
+// Accessing the script from callback
+script.Globals["getGlobal"] = new CallbackFunction(
+    (ctx, args) => {
+        string key = args[0].String;
+        return ctx.GetScript().Globals.Get(key);
+    },
+    "getGlobal"
+);
+
+script.Globals["myValue"] = 42;
+var value = script.DoString("return getGlobal('myValue')");
+Console.WriteLine(value.Number); // 42
+```
+
+## Callback Signature Requirements
+
+For a method to be directly usable as a callback (without wrapping), it must match this signature:
+
+```csharp
+public LuaValue MethodName(ScriptExecutionContext context, CallbackArguments args)
+{
+    // Implementation
+    return LuaValue.NewNumber(42);
+}
+```
+
+If your method doesn't match this signature, use `FromDelegate` or `FromMethodInfo` which will automatically create an adapter.

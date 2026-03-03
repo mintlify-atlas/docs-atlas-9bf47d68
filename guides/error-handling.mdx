@@ -1,0 +1,579 @@
+---
+title: Error Handling
+description: Learn how to handle errors and exceptions in SolarSharp scripts effectively
+---
+
+SolarSharp provides a comprehensive error handling system that makes debugging Lua scripts straightforward and integrates seamlessly with .NET exception handling.
+
+## Exception Hierarchy
+
+SolarSharp uses a structured exception hierarchy for different error types:
+
+```
+InterpreterException (base)
+├── ScriptRuntimeException (runtime errors)
+├── SyntaxErrorException (parsing/lexing errors)
+└── InternalErrorException (interpreter inconsistencies)
+```
+
+## Exception Types
+
+### InterpreterException
+
+The base exception class for all SolarSharp errors:
+
+```csharp
+using SolarSharp.Interpreter.Errors;
+
+try
+{
+    script.DoString(luaCode);
+}
+catch (InterpreterException ex)
+{
+    Console.WriteLine($"Error: {ex.Message}");
+    Console.WriteLine($"Decorated: {ex.DecoratedMessage}");
+    Console.WriteLine($"Instruction Pointer: {ex.InstructionPtr}");
+    
+    // Access call stack
+    if (ex.CallStack != null)
+    {
+        foreach (var frame in ex.CallStack)
+        {
+            Console.WriteLine($"  at {frame}");
+        }
+    }
+}
+```
+
+#### Key Properties
+
+- `Message` - Raw error message
+- `DecoratedMessage` - Error message with location information
+- `InstructionPtr` - Bytecode instruction pointer (if applicable)
+- `CallStack` - Lua call stack frames
+- `DoNotDecorateMessage` - Controls message decoration
+
+### ScriptRuntimeException
+
+Thrown during script execution for runtime errors:
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Errors;
+
+try
+{
+    script.DoString(@"
+        function divide(a, b)
+            if b == 0 then
+                error('Division by zero!')
+            end
+            return a / b
+        end
+        
+        result = divide(10, 0)
+    ");
+}
+catch (ScriptRuntimeException ex)
+{
+    Console.WriteLine($"Runtime error: {ex.DecoratedMessage}");
+    // Output: [string "chunk"]:4: Division by zero!
+}
+```
+
+#### Common Runtime Errors
+
+**Type Mismatch Errors:**
+
+```csharp
+// Arithmetic on non-numbers
+script.DoString("result = 'text' + 5");
+// Throws: attempt to perform arithmetic on a string value
+
+// Calling non-functions
+script.DoString(@"
+    x = 5
+    x()
+");
+// Throws: attempt to call a number value
+
+// Indexing non-tables
+script.DoString(@"
+    x = 5
+    y = x[1]
+");
+// Throws: attempt to index a number value
+```
+
+**Table Errors:**
+
+```csharp
+// Nil index
+script.DoString("t = {}; t[nil] = 5");
+// Throws: table index is nil
+
+// NaN index
+script.DoString("t = {}; t[0/0] = 5");
+// Throws: table index is NaN
+```
+
+### SyntaxErrorException
+
+Thrown during parsing for syntax errors:
+
+```csharp
+using SolarSharp.Interpreter.Errors;
+
+try
+{
+    script.DoString(@"
+        function broken(
+            -- Missing closing parenthesis and 'end'
+    ");
+}
+catch (SyntaxErrorException ex)
+{
+    Console.WriteLine($"Syntax error: {ex.DecoratedMessage}");
+    Console.WriteLine($"Premature EOF: {ex.IsPrematureStreamTermination}");
+}
+```
+
+#### IsPrematureStreamTermination
+
+Useful for REPL implementations to detect incomplete input:
+
+```csharp
+public string ReadMultilineInput()
+{
+    string input = "";
+    
+    while (true)
+    {
+        string line = Console.ReadLine();
+        input += line + "\n";
+        
+        try
+        {
+            script.LoadString(input);
+            return input; // Valid Lua code
+        }
+        catch (SyntaxErrorException ex)
+        {
+            if (ex.IsPrematureStreamTermination)
+            {
+                // Need more input
+                Console.Write(">> ");
+                continue;
+            }
+            else
+            {
+                // Actual syntax error
+                throw;
+            }
+        }
+    }
+}
+```
+
+### InternalErrorException
+
+Thrown when the interpreter reaches an inconsistent state (rare):
+
+```csharp
+using SolarSharp.Interpreter.Errors;
+
+try
+{
+    script.DoString(luaCode);
+}
+catch (InternalErrorException ex)
+{
+    // This indicates a bug in the interpreter
+    Console.WriteLine($"Internal error: {ex.Message}");
+    // Report to SolarSharp issue tracker
+}
+```
+
+## Error Handling Patterns
+
+### Basic Try-Catch
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Errors;
+
+public LuaValue SafeExecute(string code)
+{
+    try
+    {
+        return script.DoString(code);
+    }
+    catch (ScriptRuntimeException ex)
+    {
+        Console.WriteLine($"Runtime error: {ex.DecoratedMessage}");
+        return LuaValue.Nil;
+    }
+    catch (SyntaxErrorException ex)
+    {
+        Console.WriteLine($"Syntax error: {ex.DecoratedMessage}");
+        return LuaValue.Nil;
+    }
+    catch (InterpreterException ex)
+    {
+        Console.WriteLine($"Interpreter error: {ex.DecoratedMessage}");
+        return LuaValue.Nil;
+    }
+}
+```
+
+### Detailed Error Logging
+
+```csharp
+public class LuaErrorHandler
+{
+    public static void LogError(InterpreterException ex)
+    {
+        Console.WriteLine("=== Lua Error ===");
+        Console.WriteLine($"Type: {ex.GetType().Name}");
+        Console.WriteLine($"Message: {ex.DecoratedMessage ?? ex.Message}");
+        
+        if (ex.CallStack != null && ex.CallStack.Count > 0)
+        {
+            Console.WriteLine("\nCall Stack:");
+            foreach (var frame in ex.CallStack)
+            {
+                Console.WriteLine($"  {frame}");
+            }
+        }
+        
+        if (ex.InstructionPtr >= 0)
+        {
+            Console.WriteLine($"\nInstruction: {ex.InstructionPtr}");
+        }
+        
+        Console.WriteLine("================\n");
+    }
+}
+
+// Usage
+try
+{
+    script.DoString(code);
+}
+catch (InterpreterException ex)
+{
+    LuaErrorHandler.LogError(ex);
+}
+```
+
+### Custom Error Handler
+
+```csharp
+public class ScriptExecutor
+{
+    private readonly Script script;
+    private readonly Action<string> errorLogger;
+    
+    public ScriptExecutor(Action<string> logger = null)
+    {
+        script = new Script();
+        errorLogger = logger ?? Console.WriteLine;
+    }
+    
+    public bool TryExecute(string code, out LuaValue result)
+    {
+        result = LuaValue.Nil;
+        
+        try
+        {
+            result = script.DoString(code);
+            return true;
+        }
+        catch (ScriptRuntimeException ex)
+        {
+            errorLogger($"[Runtime] {ex.DecoratedMessage}");
+            return false;
+        }
+        catch (SyntaxErrorException ex)
+        {
+            errorLogger($"[Syntax] {ex.DecoratedMessage}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            errorLogger($"[Unexpected] {ex.Message}");
+            return false;
+        }
+    }
+}
+
+// Usage
+var executor = new ScriptExecutor(msg => Debug.Log(msg));
+if (executor.TryExecute(luaCode, out var result))
+{
+    Console.WriteLine($"Success: {result}");
+}
+```
+
+## Lua Error Function
+
+### Triggering Errors from Lua
+
+```lua
+-- Basic error
+error("Something went wrong!")
+
+-- Error with level (call stack level)
+error("Invalid argument", 2)
+
+-- Conditional error
+assert(x > 0, "x must be positive")
+```
+
+### Catching Errors in Lua
+
+```lua
+-- Using pcall (protected call)
+local success, result = pcall(function()
+    return riskyOperation()
+end)
+
+if success then
+    print("Result: " .. result)
+else
+    print("Error: " .. result)
+end
+
+-- Using xpcall with error handler
+local function errorHandler(err)
+    return "Error occurred: " .. err
+end
+
+local success, result = xpcall(function()
+    return riskyOperation()
+end, errorHandler)
+```
+
+## Standard Error Patterns
+
+SolarSharp provides static methods for standard error messages:
+
+### Arithmetic Errors
+
+```csharp
+// From Lua:
+script.DoString("x = 'text' + 5");
+// Generates: ScriptRuntimeException.ArithmeticOnNonNumber()
+```
+
+### Function Argument Errors
+
+```csharp
+using SolarSharp.Interpreter.Errors;
+
+[MoonSharpUserData]
+public class MyAPI
+{
+    public int Divide(int a, int b)
+    {
+        if (b == 0)
+        {
+            throw ScriptRuntimeException.BadArgument(1, "divide", 
+                "divisor cannot be zero");
+        }
+        return a / b;
+    }
+}
+```
+
+### Type Conversion Errors
+
+```csharp
+// These throw ScriptRuntimeException:
+script.DoString("for i = 'not a number', 10 do end");
+// Generates: ConvertToNumberFailed(1) - "'for' initial value must be a number"
+```
+
+## Exception Nesting
+
+Control exception nesting behavior:
+
+```csharp
+using SolarSharp.Interpreter;
+
+// Enable nested exceptions (wraps original exception)
+Script.GlobalOptions.RethrowExceptionNested = true;
+
+try
+{
+    script.DoString("error('test')");
+}
+catch (ScriptRuntimeException ex)
+{
+    // ex wraps the original exception
+    if (ex.InnerException != null)
+    {
+        Console.WriteLine($"Inner: {ex.InnerException.Message}");
+    }
+}
+```
+
+## Best Practices
+
+### 1. Always Catch Specific Exceptions
+
+```csharp
+// Good
+try { script.DoString(code); }
+catch (ScriptRuntimeException ex) { /* Handle runtime errors */ }
+catch (SyntaxErrorException ex) { /* Handle syntax errors */ }
+
+// Avoid
+try { script.DoString(code); }
+catch (Exception ex) { /* Too broad */ }
+```
+
+### 2. Use DecoratedMessage
+
+```csharp
+catch (InterpreterException ex)
+{
+    // Use DecoratedMessage for better error context
+    Console.WriteLine(ex.DecoratedMessage ?? ex.Message);
+}
+```
+
+### 3. Log Call Stacks
+
+```csharp
+catch (InterpreterException ex)
+{
+    if (ex.CallStack != null)
+    {
+        var stackTrace = string.Join("\n", ex.CallStack);
+        Logger.Error($"Error: {ex.Message}\nStack:\n{stackTrace}");
+    }
+}
+```
+
+### 4. Validate Input
+
+```csharp
+public LuaValue ExecuteUserScript(string code)
+{
+    // Validate before execution
+    if (string.IsNullOrWhiteSpace(code))
+    {
+        return LuaValue.Nil;
+    }
+    
+    try
+    {
+        // Try loading first to catch syntax errors early
+        var chunk = script.LoadString(code);
+        return script.Call(chunk);
+    }
+    catch (SyntaxErrorException ex)
+    {
+        // Inform user about syntax error before execution
+        ShowUserError($"Syntax error: {ex.DecoratedMessage}");
+        return LuaValue.Nil;
+    }
+    catch (ScriptRuntimeException ex)
+    {
+        ShowUserError($"Runtime error: {ex.DecoratedMessage}");
+        return LuaValue.Nil;
+    }
+}
+```
+
+### 5. Sandbox Dangerous Operations
+
+```csharp
+using SolarSharp.Interpreter.Modules;
+
+// Remove dangerous modules for user scripts
+var safeModules = CoreModules.Preset_Default 
+    & ~CoreModules.OS_System 
+    & ~CoreModules.IO;
+
+Script script = new Script(safeModules);
+```
+
+## Unity-Specific Error Handling
+
+```csharp
+using UnityEngine;
+using SolarSharp.Interpreter.Errors;
+
+public class LuaScriptRunner : MonoBehaviour
+{
+    private Script script;
+    
+    void Start()
+    {
+        script = new Script();
+    }
+    
+    public void RunUserScript(string code)
+    {
+        try
+        {
+            script.DoString(code);
+        }
+        catch (ScriptRuntimeException ex)
+        {
+            Debug.LogError($"Lua Runtime Error: {ex.DecoratedMessage}");
+        }
+        catch (SyntaxErrorException ex)
+        {
+            Debug.LogError($"Lua Syntax Error: {ex.DecoratedMessage}");
+        }
+        catch (InternalErrorException ex)
+        {
+            Debug.LogError($"Lua Internal Error: {ex.Message}");
+            // Report to issue tracker
+        }
+    }
+}
+```
+
+## Debugging Tips
+
+### Enable Debug Output
+
+```csharp
+script.Options.DebugPrint = s => Console.WriteLine($"[Lua] {s}");
+```
+
+### Capture Performance Statistics
+
+```csharp
+var stats = script.PerformanceStats;
+Console.WriteLine($"Last line: {stats.LastStopwatchTime}ms");
+```
+
+### Custom Error Messages
+
+Provide context-specific error messages:
+
+```csharp
+try
+{
+    script.DoString(userProvidedCode);
+}
+catch (ScriptRuntimeException ex)
+{
+    throw new ApplicationException(
+        $"Error in user script '{scriptName}': {ex.DecoratedMessage}",
+        ex
+    );
+}
+```
+
+## Next Steps
+
+- Explore [REPL Usage](/guides/repl) for interactive error debugging
+- Learn about [Unity Integration](/guides/unity-integration) error handling
+- Check the [API Reference](/api/script) for more details

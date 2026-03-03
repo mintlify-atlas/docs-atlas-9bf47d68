@@ -1,0 +1,328 @@
+---
+title: 'UserData'
+description: 'Class for exposing C# objects as Lua userdata'
+---
+
+The `UserData` class allows CLR objects to be exposed to Lua scripts. It provides a bridge between C# and Lua, enabling Lua code to interact with C# objects.
+
+## Properties
+
+<ResponseField name="Object" type="object">
+  Gets the CLR object associated with this userdata (null for static userdata).
+  
+  ```csharp
+  MyClass obj = userData.Object as MyClass;
+  ```
+</ResponseField>
+
+<ResponseField name="Descriptor" type="IUserDataDescriptor">
+  Gets the type descriptor of this userdata.
+</ResponseField>
+
+<ResponseField name="UserValue" type="LuaValue">
+  Gets or sets the "uservalue" associated with this userdata. See Lua's debug.getuservalue and debug.setuservalue.
+  
+  ```csharp
+  userData.UserValue = LuaValue.NewTable(script);
+  ```
+</ResponseField>
+
+## Static Configuration
+
+<ResponseField name="DefaultAccessMode" type="InteropAccessMode" static>
+  Gets or sets the default access mode to be used for userdata registration in the whole application.
+  
+  ```csharp
+  UserData.DefaultAccessMode = InteropAccessMode.Reflection;
+  ```
+</ResponseField>
+
+<ResponseField name="RegistrationPolicy" type="IRegistrationPolicy" static>
+  Gets or sets the registration policy to be used in the whole application.
+</ResponseField>
+
+## Registration Methods
+
+<ParamField path="RegisterType<T>" type="method" static>
+  Registers a type for userdata interop.
+  
+  <Expandable title="parameters">
+    <ParamField path="accessMode" type="InteropAccessMode">
+      The access mode (optional, defaults to DefaultAccessMode)
+    </ParamField>
+    <ParamField path="friendlyName" type="string">
+      Friendly name for the type (optional)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="IUserDataDescriptor">
+    The descriptor for the registered type
+  </ResponseField>
+  
+  ```csharp
+  UserData.RegisterType<MyClass>();
+  UserData.RegisterType<SecureClass>(InteropAccessMode.HideMembers);
+  ```
+</ParamField>
+
+<ParamField path="RegisterType" type="method" static>
+  Registers a type for userdata interop.
+  
+  <Expandable title="parameters">
+    <ParamField path="type" type="Type" required>
+      The type to register
+    </ParamField>
+    <ParamField path="accessMode" type="InteropAccessMode">
+      The access mode (optional)
+    </ParamField>
+    <ParamField path="friendlyName" type="string">
+      Friendly name (optional)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="IUserDataDescriptor">
+    The descriptor for the registered type
+  </ResponseField>
+  
+  ```csharp
+  UserData.RegisterType(typeof(MyClass));
+  ```
+</ParamField>
+
+<ParamField path="RegisterAssembly" type="method" static>
+  Registers all types marked with MoonSharpUserDataAttribute in an assembly.
+  
+  <Expandable title="parameters">
+    <ParamField path="asm" type="Assembly">
+      The assembly (optional, defaults to calling assembly)
+    </ParamField>
+    <ParamField path="includeExtensionTypes" type="bool">
+      Whether to register extension types (optional, default false)
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  UserData.RegisterAssembly(); // Current assembly
+  UserData.RegisterAssembly(typeof(MyClass).Assembly);
+  ```
+</ParamField>
+
+<ParamField path="UnregisterType<T>" type="method" static>
+  Unregisters a type. WARNING: Use only for testing. It's dangerous to unregister types at runtime.
+  
+  ```csharp
+  UserData.UnregisterType<MyClass>();
+  ```
+</ParamField>
+
+## Creation Methods
+
+<ParamField path="Create" type="method" static>
+  Creates a userdata LuaValue from the specified CLR object.
+  
+  <Expandable title="parameters">
+    <ParamField path="o" type="object" required>
+      The CLR object
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    A LuaValue containing the userdata
+  </ResponseField>
+  
+  ```csharp
+  var myObj = new MyClass();
+  LuaValue userData = UserData.Create(myObj);
+  script.Globals["myObject"] = userData;
+  ```
+</ParamField>
+
+<ParamField path="Create(object, IUserDataDescriptor)" type="method" static>
+  Creates a userdata LuaValue using a specific descriptor.
+  
+  <Expandable title="parameters">
+    <ParamField path="o" type="object" required>
+      The CLR object
+    </ParamField>
+    <ParamField path="descr" type="IUserDataDescriptor" required>
+      The descriptor to use
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    A LuaValue containing the userdata
+  </ResponseField>
+</ParamField>
+
+<ParamField path="CreateStatic<T>" type="method" static>
+  Creates static userdata for accessing static members of a type.
+  
+  <ResponseField name="returns" type="LuaValue">
+    A LuaValue containing static userdata
+  </ResponseField>
+  
+  ```csharp
+  LuaValue mathType = UserData.CreateStatic<Math>();
+  script.Globals["Math"] = mathType;
+  // Now Lua can call: Math.Sqrt(16)
+  ```
+</ParamField>
+
+<ParamField path="CreateStatic(Type)" type="method" static>
+  Creates static userdata for the specified type.
+  
+  <Expandable title="parameters">
+    <ParamField path="t" type="Type" required>
+      The type
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    A LuaValue containing static userdata
+  </ResponseField>
+  
+  ```csharp
+  LuaValue consoleType = UserData.CreateStatic(typeof(Console));
+  script.Globals["Console"] = consoleType;
+  ```
+</ParamField>
+
+## Query Methods
+
+<ParamField path="IsTypeRegistered<T>" type="method" static>
+  Determines whether the specified type is registered.
+  
+  <ResponseField name="returns" type="bool">
+    True if registered
+  </ResponseField>
+  
+  ```csharp
+  if (!UserData.IsTypeRegistered<MyClass>()) {
+      UserData.RegisterType<MyClass>();
+  }
+  ```
+</ParamField>
+
+<ParamField path="GetDescriptorForType<T>" type="method" static>
+  Gets the best possible type descriptor for a specified CLR type.
+  
+  <Expandable title="parameters">
+    <ParamField path="searchInterfaces" type="bool" required>
+      Whether to search interfaces
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="IUserDataDescriptor">
+    The descriptor
+  </ResponseField>
+  
+  ```csharp
+  var descriptor = UserData.GetDescriptorForType<MyClass>(true);
+  ```
+</ParamField>
+
+<ParamField path="GetDescriptorForObject" type="method" static>
+  Gets the best possible type descriptor for a specified CLR object.
+  
+  <Expandable title="parameters">
+    <ParamField path="o" type="object" required>
+      The object
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="IUserDataDescriptor">
+    The descriptor
+  </ResponseField>
+  
+  ```csharp
+  var obj = new MyClass();
+  var descriptor = UserData.GetDescriptorForObject(obj);
+  ```
+</ParamField>
+
+## Extension Methods
+
+<ParamField path="RegisterExtensionType" type="method" static>
+  Registers an extension type (a type containing extension methods).
+  
+  <Expandable title="parameters">
+    <ParamField path="type" type="Type" required>
+      The type containing extension methods
+    </ParamField>
+    <ParamField path="mode" type="InteropAccessMode">
+      The access mode (optional)
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  UserData.RegisterExtensionType(typeof(MyExtensions));
+  ```
+</ParamField>
+
+## Example Usage
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+using SolarSharp.Interpreter.Interop;
+
+// Define a C# class
+public class Player
+{
+    public string Name { get; set; }
+    public int Health { get; set; }
+    public int MaxHealth { get; set; }
+    
+    public void TakeDamage(int amount)
+    {
+        Health = Math.Max(0, Health - amount);
+    }
+    
+    public void Heal(int amount)
+    {
+        Health = Math.Min(MaxHealth, Health + amount);
+    }
+}
+
+// Register the type
+UserData.RegisterType<Player>();
+
+var script = new Script();
+
+// Create and expose a Player instance
+var player = new Player 
+{ 
+    Name = "Hero", 
+    Health = 100, 
+    MaxHealth = 100 
+};
+
+script.Globals["player"] = UserData.Create(player);
+
+// Use from Lua
+script.DoString(@"
+    print(player.Name)       -- Hero
+    print(player.Health)     -- 100
+    
+    player:TakeDamage(30)
+    print(player.Health)     -- 70
+    
+    player:Heal(20)
+    print(player.Health)     -- 90
+    
+    player.Health = 50       -- Direct property access
+    print(player.Health)     -- 50
+");
+
+// Expose static members
+UserData.RegisterType<Math>();
+script.Globals["Math"] = UserData.CreateStatic<Math>();
+
+script.DoString(@"
+    local result = Math.Sqrt(16)
+    print(result)  -- 4
+");
+
+// Configure access mode for security
+UserData.RegisterType<SecureData>(InteropAccessMode.HideMembers);
+```

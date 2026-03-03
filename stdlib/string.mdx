@@ -1,0 +1,337 @@
+---
+title: String Module
+description: String manipulation functions in SolarSharp
+---
+
+The String module (`CoreModules.String`) provides comprehensive string manipulation capabilities, including pattern matching, formatting, and text processing.
+
+## Important: UTF-16 Encoding
+
+<Warning>
+SolarSharp uses UTF-16 encoding internally (as .NET strings do), unlike standard Lua which uses UTF-8. This affects:
+- String length calculations
+- `string.byte()` returns UTF-16 code units
+- Character indexing and pattern matching
+
+This is generally transparent for ASCII text but may differ for Unicode characters.
+</Warning>
+
+## String Metatable
+
+SolarSharp automatically sets the string metatable with `__index` pointing to the string module, enabling object-oriented style calls:
+
+```lua
+local s = "hello"
+print(s:upper())        -- "HELLO" (same as string.upper(s))
+print(s:sub(1, 3))      -- "hel"
+print(s:len())          -- 5
+```
+
+## Basic Functions
+
+### string.len(s)
+
+Returns the length of a string in UTF-16 code units.
+
+```lua
+print(string.len("hello"))     -- 5
+print(string.len(""))          -- 0
+print(("test"):len())          -- 4 (method syntax)
+```
+
+### string.upper(s) / string.lower(s)
+
+Converts string to uppercase or lowercase.
+
+```lua
+print(string.upper("Hello World"))  -- "HELLO WORLD"
+print(string.lower("Hello World"))  -- "hello world"
+print(("test"):upper())             -- "TEST"
+```
+
+### string.reverse(s)
+
+Reverses a string.
+
+```lua
+print(string.reverse("hello"))  -- "olleh"
+print(("abc"):reverse())        -- "cba"
+```
+
+## Character Operations
+
+### string.byte(s [, i [, j]])
+
+Returns the UTF-16 code units of characters in the string.
+
+```lua
+print(string.byte("ABC"))       -- 65
+print(string.byte("ABC", 2))    -- 66
+print(string.byte("ABC", 1, 3)) -- 65  66  67
+print(string.byte("ABC", -1))   -- 67 (last characterােsitive indexing)
+```
+
+**Parameters:**
+- `s` - Input string
+- `i` - Start position (default: 1)
+- `j` - End position (default: i)
+
+### string.char(...)
+
+Converts UTF-16 code units to a string.
+
+```lua
+print(string.char(65, 66, 67))      -- "ABC"
+print(string.char(72, 105))         -- "Hi"
+```
+
+## Substring Operations
+
+### string.sub(s, i [, j])
+
+Extracts a substring.
+
+```lua
+local s = "Hello World"
+print(string.sub(s, 1, 5))   -- "Hello"
+print(string.sub(s, 7))      -- "World" (to end)
+print(string.sub(s, -5))     -- "World" (last 5 chars)
+print(string.sub(s, -5, -1)) -- "World"
+print(s:sub(1, 5))           -- "Hello" (method syntax)
+```
+
+**Note:** Lua uses 1-based indexing. Negative indices count from the end.
+
+### string.rep(s, n [, sep])
+
+Repeats a string n times with optional separator.
+
+```lua
+print(string.rep("Ha", 3))        -- "HaHaHa"
+print(string.rep("Ha", 3, "-"))  -- "Ha-Ha-Ha"
+print(string.rep("*", 5))         -- "*****"
+```
+
+## Pattern Matching
+
+### string.find(s, pattern [, init [, plain]])
+
+Finds the first occurrence of a pattern.
+
+```lua
+local s = "Hello World"
+local start, finish = string.find(s, "World")
+print(start, finish)  -- 7  11
+
+-- With pattern
+local start, finish = string.find("test123", "%d+")
+print(start, finish)  -- 5  7
+
+-- Plain text search (no pattern)
+local start, finish = string.find("a.b.c", ".", 1, true)
+print(start, finish)  -- 2  2
+```
+
+**Returns:** Start and end positions, followed by any captures, or `nil` if not found.
+
+### string.match(s, pattern [, init])
+
+Extracts the first match of a pattern.
+
+```lua
+print(string.match("Hello 123 World", "%d+"))  -- "123"
+print(string.match("test@example.com", "(%w+)@(%w+)%.(%w+)"))  -- "test"  "example"  "com"
+
+-- Named captures
+local name = string.match("John Smith", "^(%a+)")
+print(name)  -- "John"
+```
+
+### string.gmatch(s, pattern)
+
+Returns an iterator function for all matches.
+
+```lua
+for word in string.gmatch("Hello World Lua", "%a+") do
+    print(word)
+end
+-- Output:
+-- Hello
+-- World
+-- Lua
+
+-- Extract key-value pairs
+for key, value in string.gmatch("a=1 b=2 c=3", "(%w+)=(%w+)") do
+    print(key, value)
+end
+```
+
+### string.gsub(s, pattern, repl [, n])
+
+Replaces occurrences of a pattern.
+
+```lua
+-- String replacement
+print(string.gsub("hello world", "world", "Lua"))  -- "hello Lua"  1
+
+-- Pattern replacement
+print(string.gsub("abc123def456", "%d+", "NUM"))  -- "abcNUMdefNUM"  2
+
+-- Limited replacements
+print(string.gsub("aaa", "a", "b", 2))  -- "bba"  2
+
+-- Function replacement
+local result = string.gsub("hello world", "%a+", function(word)
+    return word:upper()
+end)
+print(result)  -- "HELLO WORLD"
+
+-- Table replacement
+local t = {hello = "goodbye", world = "universe"}
+print(string.gsub("hello world", "%a+", t))  -- "goodbye universe"
+```
+
+**Returns:** Modified string and the number of substitutions made.
+
+## String Formatting
+
+### string.format(formatstring, ...)
+
+Formats a string using printf-style formatting.
+
+```lua
+print(string.format("Hello %s", "World"))        -- "Hello World"
+print(string.format("Pi = %.2f", math.pi))       -- "Pi = 3.14"
+print(string.format("%d + %d = %d", 2, 3, 5))   -- "2 + 3 = 5"
+print(string.format("%05d", 42))                 -- "00042"
+print(string.format("0x%X", 255))                -- "0x FF"
+```
+
+**Format Specifiers:**
+
+| Specifier | Description | Example |
+|-----------|-------------|--------|
+| `%s` | String | `string.format("%s", "text")` |
+| `%d`, `%i` | Integer | `string.format("%d", 42)` |
+| `%f` | Float | `string.format("%.2f", 3.14)` |
+| `%e` | Scientific notation | `string.format("%e", 1000)` |
+| `%x`, `%X` | Hexadecimal | `string.format("%x", 255)` |
+| `%c` | Character | `string.format("%c", 65)` |
+| `%q` | Quoted string | `string.format("%q", "test")` |
+| `%%` | Literal % | `string.format("100%%")` |
+
+**Flags:**
+- `-` : Left justify
+- `+` : Show sign for numbers
+- `0` : Zero padding
+- `#` : Alternate form (e.g., `0x` prefix)
+- ` ` : Space for positive numbers
+
+## SolarSharp Extensions
+
+These functions are SolarSharp-specific extensions:
+
+### string.startsWith(s1, s2)
+
+Checks if a string starts with another string.
+
+```lua
+print(string.startsWith("Hello World", "Hello"))  -- true
+print(string.startsWith("test", "Test"))          -- false
+```
+
+### string.endsWith(s1, s2)
+
+Checks if a string ends with another string.
+
+```lua
+print(string.endsWith("test.txt", ".txt"))  -- true
+print(string.endsWith("file.doc", ".txt"))  -- false
+```
+
+### string.contains(s1, s2)
+
+Checks if a string contains another string.
+
+```lua
+print(string.contains("Hello World", "World"))  -- true
+print(string.contains("test", "xyz"))           -- false
+```
+
+### string.dump(function)
+
+Serializes a function to a base64-encoded string.
+
+```lua
+local func = function() return "Hello" end
+local serialized = string.dump(func)
+print(serialized)  -- "SolarSharp_dump_b64::..."
+```
+
+## Pattern Syntax
+
+SolarSharp supports Lua pattern matching:
+
+**Character Classes:**
+- `.` : Any character
+- `%a` : Letters
+- `%d` : Digits
+- `%s` : Space characters
+- `%w` : Alphanumeric characters
+- `%x` : Hexadecimal digits
+- `%c`, `%l`, `%p`, `%u` : Control, lowercase, punctuation, uppercase
+
+**Modifiers:**
+- `*` : 0 or more repetitions
+- `+` : 1 or more repetitions
+- `-` : 0 or more (non-greedy)
+- `?` : 0 or 1 occurrence
+
+**Other:**
+- `[set]` : Character set
+- `[^set]` : Complement of set
+- `^` : Beginning of string
+- `$` : End of string
+- `()` : Capture group
+
+## Examples
+
+### Email Validation
+
+```lua
+function isValidEmail(email)
+    local pattern = "^[%w%._%%-]+@[%w%._%%-]+%.%a+$"
+    return string.match(email, pattern) ~= nil
+end
+```
+
+### Parse CSV Line
+
+```lua
+function parseCSV(line)
+    local fields = {}
+    for field in string.gmatch(line, '([^,]+)') do
+        table.insert(fields, field)
+    end
+    return fields
+end
+```
+
+### Template Replacement
+
+```lua
+function fillTemplate(template, data)
+    return string.gsub(template, "%$(%w+)", data)
+end
+
+local template = "Hello $name, you are $age years old"
+local data = {name = "Alice", age = "30"}
+print(fillTemplate(template, data))
+-- "Hello Alice, you are 30 years old"
+```
+
+## See Also
+
+- [Pattern Matching Guide](/stdlib/string#pattern-matching)
+- [Basic Functions](/stdlib/basic)
+- [Table Module](/stdlib/table)

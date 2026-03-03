@@ -1,0 +1,316 @@
+---
+title: 'Performance Optimization'
+description: 'Optimize SolarSharp script execution with performance profiling and best practices'
+---
+
+## Overview
+
+SolarSharp provides built-in performance profiling tools and optimization strategies to maximize script execution speed.
+
+## Performance Statistics
+
+Enable performance tracking to measure execution time:
+
+```csharp
+Script script = new Script();
+
+// Enable performance tracking
+script.PerformanceStats.Enabled = true;
+
+// Run your script
+script.DoString(@"
+    local sum = 0
+    for i = 1, 1000000 do
+        sum = sum + i
+    end
+    return sum
+");
+
+// Get performance log
+string perfLog = script.PerformanceStats.GetPerformanceLog();
+Console.WriteLine(perfLog);
+```
+
+### Available Metrics
+
+The `PerformanceStatistics` class tracks:
+
+- **Execution time**: Total script runtime
+- **Bytecode compilation**: Time spent compiling Lua to bytecode
+- **Adapters compilation**: Time generating CLR interop adapters
+- **Garbage collection**: Impact of GC on script performance
+
+### Reading Specific Counters
+
+```csharp
+using SolarSharp.Interpreter.Diagnostics;
+
+script.PerformanceStats.Enabled = true;
+script.DoString("return 42");
+
+// Get execution time
+var result = script.PerformanceStats
+    .GetPerformanceCounterResult(PerformanceCounter.Execution);
+
+if (result != null)
+{
+    Console.WriteLine($"Execution: {result.ElapsedTime}ms");
+    Console.WriteLine($"Calls: {result.Count}");
+}
+```
+
+## Optimization Strategies
+
+### 1. Use Local Variables
+
+**Slow (global access):**
+```lua
+for i = 1, 1000000 do
+    result = math.sqrt(i)
+end
+```
+
+**Fast (local variables):**
+```lua
+local sqrt = math.sqrt
+local result
+for i = 1, 1000000 do
+    result = sqrt(i)
+end
+```
+
+Local variables compile to register operations, while globals require table lookups.
+
+### 2. Minimize Table Lookups
+
+**Slow:**
+```lua
+for i = 1, 1000 do
+    print(myTable.data.config.value)
+end
+```
+
+**Fast:**
+```lua
+local value = myTable.data.config.value
+for i = 1, 1000 do
+    print(value)
+end
+```
+
+### 3. Preallocate Tables
+
+When possible, provide size hints:
+
+```lua
+-- Preallocated array (faster)
+local t = table.create(1000)
+for i = 1, 1000 do
+    t[i] = i * 2
+end
+```
+
+### 4. Use Numeric For Loops
+
+**Fast (numeric for):**
+```lua
+for i = 1, #array do
+    process(array[i])
+end
+```
+
+**Slower (ipairs):**
+```lua
+for i, v in ipairs(array) do
+    process(v)
+end
+```
+
+### 5. Tail Call Optimization
+
+SolarSharp automatically optimizes tail calls after a threshold:
+
+```csharp
+Script script = new Script();
+
+// Control TCO threshold (default: 65536)
+script.Options.TailCallOptimizationThreshold = 32768;
+
+// Disable TCO entirely
+// script.Options.TailCallOptimizationThreshold = int.MaxValue;
+
+// Always enable TCO
+// script.Options.TailCallOptimizationThreshold = 0;
+```
+
+**Tail-recursive function:**
+```lua
+local function factorial(n, acc)
+    acc = acc or 1
+    if n <= 1 then return acc end
+    return factorial(n - 1, n * acc)  -- tail call
+end
+
+print(factorial(10000))  -- Won't overflow with TCO
+```
+
+<Warning>
+TCO improves performance but **loses stack trace information** for debugging.
+</Warning>
+
+## CLR Interop Performance
+
+### Preregister Types
+
+Register C# types before creating scripts:
+
+```csharp
+// Register once at startup
+UserData.RegisterType<MyClass>();
+
+// Use in multiple scripts (faster)
+Script script = new Script();
+script.Globals["MyClass"] = typeof(MyClass);
+```
+
+### Use LazyOptimized Mode
+
+```csharp
+// Set default access mode (at app startup)
+UserData.DefaultAccessMode = InteropAccessMode.LazyOptimized;
+
+// Or per-type
+UserData.RegisterType<MyClass>(InteropAccessMode.LazyOptimized);
+```
+
+**Access modes:**
+- `LazyOptimized`: Best performance, generates optimized accessors
+- `Reflection`: Slower, uses reflection for all calls
+- `Preoptimized`: Upfront cost, faster repeated access
+
+### Avoid Boxing
+
+Minimize conversions between Lua and CLR:
+
+**Slow (multiple conversions):**
+```csharp
+script.Globals["value"] = 42;
+int result = (int)script.Globals.Get("value").Number;
+```
+
+**Fast (direct access):**
+```csharp
+LuaValue value = LuaValue.NewNumber(42);
+script.Globals["value"] = value;
+double result = value.Number;  // No boxing
+```
+
+## Memory Management
+
+### Disable Thread Checks
+
+If running single-threaded, disable safety checks:
+
+```csharp
+Script script = new Script();
+script.Options.CheckThreadAccess = false;
+```
+
+<Warning>
+Only disable if you're **certain** no concurrent access occurs.
+</Warning>
+
+### Reuse Scripts
+
+Avoiding creating new `Script` instances repeatedly:
+
+**Slow:**
+```csharp
+for (int i = 0; i < 1000; i++)
+{
+    Script script = new Script();
+    script.DoString("return 42");
+}
+```
+
+**Fast:**
+```csharp
+Script script = new Script();
+LuaValue func = script.LoadString("return 42");
+for (int i = 0; i < 1000; i++)
+{
+    func.Call();
+}
+```
+
+### Clear Globals
+
+Reuse scripts by clearing state:
+
+```csharp
+Script script = new Script();
+
+// Run script 1
+script.DoString("x = 10");
+
+// Clear for reuse
+script.Globals = new Table(script);
+script.Globals.RegisterCoreModules(CoreModules.Preset_Default);
+
+// Run script 2 (clean state)
+script.DoString("print(x)");  -- nil
+```
+
+## Profiling Example
+
+Comprehensive performance profiling:
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Diagnostics;
+using System.Diagnostics;
+
+class PerformanceTest
+{
+    static void Main()
+    {
+        Script script = new Script();
+        script.PerformanceStats.Enabled = true;
+        
+        Stopwatch sw = Stopwatch.StartNew();
+        
+        script.DoString(@"
+            local function fib(n)
+                if n <= 1 then return n end
+                return fib(n-1) + fib(n-2)
+            end
+            return fib(30)
+        ");
+        
+        sw.Stop();
+        
+        Console.WriteLine($"Total time: {sw.ElapsedMilliseconds}ms");
+        Console.WriteLine("\nDetailed stats:");
+        Console.WriteLine(script.PerformanceStats.GetPerformanceLog());
+    }
+}
+```
+
+## Benchmarking Best Practices
+
+1. **Warm up the JIT**: Run code once before measuring
+2. **Use Stopwatch**: More accurate than `DateTime`
+3. **Average multiple runs**: Reduce variance
+4. **Disable GC during tests**: `GC.TryStartNoGCRegion()`
+5. **Compare with native Lua**: Baseline against PUC-Rio Lua
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Bytecode" icon="file-binary" href="/advanced/bytecode">
+    Understanding bytecode compilation
+  </Card>
+  <Card title="Debugging" icon="bug" href="/advanced/debugging">
+    Debug performance issues
+  </Card>
+</CardGroup>

@@ -1,0 +1,281 @@
+---
+title: 'ScriptOptions'
+description: 'Configuration options for individual Script instances'
+---
+
+The `ScriptOptions` class contains options to customize the behavior of individual `Script` objects.
+
+## Properties
+
+<ResponseField name="ScriptLoader" type="IScriptLoader">
+  Gets or sets the script loader used for loading scripts and modules.
+  
+  ```csharp
+  script.Options.ScriptLoader = new FileSystemScriptLoader();
+  ```
+</ResponseField>
+
+<ResponseField name="DebugPrint" type="Action<string>">
+  Gets or sets the debug print handler (used by Lua's `print` function).
+  
+  ```csharp
+  script.Options.DebugPrint = s => Console.WriteLine($"[Lua] {s}");
+  
+  script.DoString("print('Hello')");
+  // Output: [Lua] Hello
+  ```
+</ResponseField>
+
+<ResponseField name="DebugInput" type="Func<string, string>">
+  Gets or sets the debug input handler (takes a prompt and returns input, used for interactive interpreters like debug.debug).
+  
+  ```csharp
+  script.Options.DebugInput = prompt => {
+      Console.Write(prompt);
+      return Console.ReadLine();
+  };
+  ```
+</ResponseField>
+
+<ResponseField name="UseLuaErrorLocations" type="bool">
+  Gets or sets whether error messages use Lua error locations instead of SolarSharp improved ones. Use this for compatibility with legacy Lua code that parses error messages.
+  
+  ```csharp
+  script.Options.UseLuaErrorLocations = true;
+  ```
+</ResponseField>
+
+<ResponseField name="ColonOperatorClrCallbackBehaviour" type="ColonOperatorBehaviour">
+  Gets or sets the behavior of the colon (':') operator in callbacks to CLR code.
+  
+  ```csharp
+  script.Options.ColonOperatorClrCallbackBehaviour = 
+      ColonOperatorBehaviour.TreatAsColon;
+  ```
+</ResponseField>
+
+<ResponseField name="Stdin" type="Stream">
+  Gets or sets the stream used as stdin. If null, a default stream is used.
+  
+  ```csharp
+  script.Options.Stdin = new MemoryStream(inputData);
+  ```
+</ResponseField>
+
+<ResponseField name="Stdout" type="Stream">
+  Gets or sets the stream used as stdout. If null, a default stream is used.
+  
+  ```csharp
+  var output = new MemoryStream();
+  script.Options.Stdout = output;
+  ```
+</ResponseField>
+
+<ResponseField name="Stderr" type="Stream">
+  Gets or sets the stream used as stderr. If null, a default stream is used.
+  
+  ```csharp
+  script.Options.Stderr = new MemoryStream();
+  ```
+</ResponseField>
+
+<ResponseField name="TailCallOptimizationThreshold" type="int">
+  Gets or sets the stack depth threshold at which SolarSharp starts doing tail call optimizations (TCO).
+  
+  TCOs can prevent stack overflows in corner cases but lose debug information. SolarSharp starts performing TCOs only after reaching this threshold.
+  
+  - Default: 65536 (64K entries)
+  - Set to `int.MaxValue` to disable TCOs entirely
+  - Set to `0` to always enable TCOs
+  
+  ```csharp
+  // Disable tail call optimization
+  script.Options.TailCallOptimizationThreshold = int.MaxValue;
+  
+  // Always enable TCO
+  script.Options.TailCallOptimizationThreshold = 0;
+  ```
+</ResponseField>
+
+<ResponseField name="CheckThreadAccess" type="bool">
+  Gets or sets whether the thread check is enabled.
+  
+  A "lazy" thread check is performed every time execution is entered to ensure no two threads call SolarSharp execution concurrently. The check is best-effort and might trigger in odd legal situations (like switching threads inside a CLR callback without actual concurrency).
+  
+  Disable this if the thread check is causing problems, but ensure you're not calling SolarSharp execution concurrently as it's not supported.
+  
+  ```csharp
+  script.Options.CheckThreadAccess = false; // Use with caution
+  ```
+</ResponseField>
+
+## Example Usage
+
+### Custom Print Handler
+
+```csharp
+using SolarSharp.Interpreter;
+using System;
+
+var script = new Script();
+
+// Redirect print to a custom logger
+var logMessages = new List<string>();
+script.Options.DebugPrint = message => {
+    var timestamped = $"[{DateTime.Now:HH:mm:ss}] {message}";
+    logMessages.Add(timestamped);
+    Console.WriteLine(timestamped);
+};
+
+script.DoString(@"
+    print('Starting process...')
+    print('Done!')
+");
+
+// Access logged messages
+foreach (var log in logMessages) {
+    Console.WriteLine(log);
+}
+```
+
+### Custom Script Loader
+
+```csharp
+using SolarSharp.Interpreter.Loaders;
+
+public class DatabaseScriptLoader : ScriptLoaderBase
+{
+    private readonly IDatabase _db;
+    
+    public DatabaseScriptLoader(IDatabase db)
+    {
+        _db = db;
+    }
+    
+    public override object LoadFile(string file)
+    {
+        // Load scripts from database instead of filesystem
+        return _db.GetScript(file);
+    }
+    
+    public override bool ScriptFileExists(string name)
+    {
+        return _db.ScriptExists(name);
+    }
+}
+
+var script = new Script();
+script.Options.ScriptLoader = new DatabaseScriptLoader(myDatabase);
+
+script.DoString("require('my-module')"); // Loads from database
+```
+
+### Stream Redirection
+
+```csharp
+var script = new Script();
+
+// Capture stdout
+var outputStream = new MemoryStream();
+script.Options.Stdout = outputStream;
+
+script.DoString(@"
+    io.write('Hello from Lua\n')
+    io.write('Second line\n')
+");
+
+// Read captured output
+outputStream.Position = 0;
+using (var reader = new StreamReader(outputStream))
+{
+    string output = reader.ReadToEnd();
+    Console.WriteLine($"Captured: {output}");
+}
+```
+
+### Interactive Debugger
+
+```csharp
+var script = new Script();
+
+script.Options.DebugInput = prompt => {
+    Console.ForegroundColor = ConsoleColor.Yellow;
+    Console.Write(prompt);
+    Console.ResetColor();
+    return Console.ReadLine();
+};
+
+script.DoString(@"
+    function buggyFunction()
+        local x = 10
+        local y = 20
+        debug.debug()  -- Enters interactive mode
+        return x + y
+    end
+    
+    buggyFunction()
+");
+```
+
+### Tail Call Optimization Control
+
+```csharp
+var script = new Script();
+
+// Disable TCO for better debugging
+script.Options.TailCallOptimizationThreshold = int.MaxValue;
+
+script.DoString(@"
+    function factorial(n, acc)
+        acc = acc or 1
+        if n <= 1 then
+            return acc
+        end
+        return factorial(n - 1, n * acc)  -- Tail call
+    end
+    
+    print(factorial(1000))  -- Would normally use TCO
+");
+```
+
+### Secure Sandbox Configuration
+
+```csharp
+var script = new Script(CoreModules.Preset_HardSandbox);
+
+// Disable file system access
+script.Options.ScriptLoader = new InvalidScriptLoader();
+
+// Redirect I/O to prevent file access
+script.Options.Stdin = Stream.Null;
+script.Options.Stdout = Stream.Null;
+script.Options.Stderr = Stream.Null;
+
+// Custom print that doesn't expose system info
+script.Options.DebugPrint = s => {
+    // Filter or sanitize output
+    Console.WriteLine($"[Sandboxed]: {SanitizeOutput(s)}");
+};
+
+try {
+    script.DoString("require('os')"); // Will fail - no loader
+} catch {
+    Console.WriteLine("Module loading blocked");
+}
+```
+
+### Multi-Script with Shared Defaults
+
+```csharp
+// Configure defaults for all new scripts
+Script.DefaultOptions.DebugPrint = s => MyLogger.Log(s);
+Script.DefaultOptions.CheckThreadAccess = true;
+Script.DefaultOptions.TailCallOptimizationThreshold = 32768;
+
+// All new scripts inherit these defaults
+var script1 = new Script();
+var script2 = new Script();
+
+// But can be overridden per-script
+script2.Options.DebugPrint = s => Console.WriteLine($"Script2: {s}");
+```

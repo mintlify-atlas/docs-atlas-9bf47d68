@@ -1,0 +1,335 @@
+---
+title: 'Script'
+description: 'Main class representing a SolarSharp scripting session'
+---
+
+The `Script` class is the central class for executing Lua code in SolarSharp. Multiple Script objects can coexist in the same program but cannot share data among themselves unless some mechanism is put in place.
+
+## Constructors
+
+<ParamField path="Script()" type="constructor">
+  Creates a new Script instance with default core modules (Preset_Default).
+  
+  ```csharp
+  var script = new Script();
+  ```
+</ParamField>
+
+<ParamField path="Script(CoreModules)" type="constructor">
+  Creates a new Script instance with specified core modules.
+  
+  <Expandable title="parameters">
+    <ParamField path="coreModules" type="CoreModules">
+      The core modules to be pre-registered in the default global table
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  var script = new Script(CoreModules.Preset_HardSandbox);
+  ```
+</ParamField>
+
+## Properties
+
+<ResponseField name="Globals" type="Table">
+  The default global table for this script. Execution uses this table unless a different table is intentionally passed.
+  
+  ```csharp
+  script.Globals["myVar"] = 42;
+  ```
+</ResponseField>
+
+<ResponseField name="Options" type="ScriptOptions">
+  Gets access to the script options for this instance.
+</ResponseField>
+
+<ResponseField name="Registry" type="Table">
+  A predefined table that can be used by any CLR code to store Lua values. Use unique keys (GUIDs, library names, or userdata with CLR object addresses) to avoid collisions.
+</ResponseField>
+
+<ResponseField name="GlobalOptions" type="ScriptGlobalOptions" static>
+  Gets the global options that cannot be customized per-script.
+</ResponseField>
+
+<ResponseField name="DefaultOptions" type="ScriptOptions" static>
+  Gets or sets the default script options for all newly created scripts.
+</ResponseField>
+
+<ResponseField name="SourceCodeCount" type="int">
+  Gets the number of source code chunks loaded in this script.
+</ResponseField>
+
+## Loading Methods
+
+<ParamField path="LoadString" type="method">
+  Loads a string containing Lua/SolarSharp code.
+  
+  <Expandable title="parameters">
+    <ParamField path="code" type="string" required>
+      The Lua code to load
+    </ParamField>
+    <ParamField path="globalTable" type="Table">
+      The global table to bind to this chunk (optional, defaults to script.Globals)
+    </ParamField>
+    <ParamField path="codeFriendlyName" type="string">
+      Name used in error messages (optional)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    A function which will execute the loaded code when called
+  </ResponseField>
+  
+  ```csharp
+  LuaValue chunk = script.LoadString("return 1 + 1");
+  LuaValue result = script.Call(chunk); // returns 2
+  ```
+</ParamField>
+
+<ParamField path="LoadFile" type="method">
+  Loads a file containing Lua/SolarSharp code.
+  
+  <Expandable title="parameters">
+    <ParamField path="filename" type="string" required>
+      The filename to load
+    </ParamField>
+    <ParamField path="globalContext" type="Table">
+      The global table to bind to this chunk (optional)
+    </ParamField>
+    <ParamField path="friendlyFilename" type="string">
+      The filename to be used in error messages (optional)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    A function which will execute the loaded code when called
+  </ResponseField>
+  
+  ```csharp
+  LuaValue chunk = script.LoadFile("script.lua");
+  script.Call(chunk);
+  ```
+</ParamField>
+
+<ParamField path="LoadStream" type="method">
+  Loads a stream containing Lua/SolarSharp code. Does not close the stream.
+  
+  <Expandable title="parameters">
+    <ParamField path="stream" type="Stream" required>
+      The stream containing code
+    </ParamField>
+    <ParamField path="globalTable" type="Table">
+      The global table to bind to this chunk (optional)
+    </ParamField>
+    <ParamField path="codeFriendlyName" type="string">
+      Name used in error messages (optional)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    A function which will execute the loaded code when called
+  </ResponseField>
+</ParamField>
+
+## Execution Methods
+
+<ParamField path="DoString" type="method">
+  Loads and executes a string containing Lua/SolarSharp code.
+  
+  <Expandable title="parameters">
+    <ParamField path="code" type="string" required>
+      The Lua code to execute
+    </ParamField>
+    <ParamField path="globalContext" type="Table">
+      The global context (optional)
+    </ParamField>
+    <ParamField path="codeFriendlyName" type="string">
+      Name used in error messages (optional)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The result of executing the code
+  </ResponseField>
+  
+  ```csharp
+  LuaValue result = script.DoString("return 2 + 2");
+  Console.WriteLine(result.Number); // 4
+  ```
+</ParamField>
+
+<ParamField path="DoFile" type="method">
+  Loads and executes a file containing Lua/SolarSharp code.
+  
+  <Expandable title="parameters">
+    <ParamField path="filename" type="string" required>
+      The filename to execute
+    </ParamField>
+    <ParamField path="globalContext" type="Table">
+      The global context (optional)
+    </ParamField>
+    <ParamField path="codeFriendlyName" type="string">
+      Name used in error messages (optional)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The result of executing the file
+  </ResponseField>
+  
+  ```csharp
+  script.DoFile("init.lua");
+  ```
+</ParamField>
+
+<ParamField path="Call" type="method">
+  Calls a Lua function.
+  
+  <Expandable title="parameters">
+    <ParamField path="function" type="LuaValue" required>
+      The Lua function to call
+    </ParamField>
+    <ParamField path="args" type="LuaValue[]">
+      Arguments to pass to the function (optional)
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The return value(s) of the function call
+  </ResponseField>
+  
+  ```csharp
+  LuaValue func = script.Globals.Get("myFunction");
+  LuaValue result = script.Call(func, LuaValue.NewNumber(5));
+  ```
+</ParamField>
+
+## Static Helper Methods
+
+<ParamField path="RunString" type="method" static>
+  Quickly runs Lua code with all defaults.
+  
+  <Expandable title="parameters">
+    <ParamField path="code" type="string" required>
+      The Lua code to execute
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The result of execution
+  </ResponseField>
+  
+  ```csharp
+  LuaValue result = Script.RunString("return 'Hello, World!'");
+  ```
+</ParamField>
+
+<ParamField path="RunFile" type="method" static>
+  Quickly runs a Lua file with all defaults.
+  
+  <Expandable title="parameters">
+    <ParamField path="filename" type="string" required>
+      The filename to execute
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The result of execution
+  </ResponseField>
+  
+  ```csharp
+  Script.RunFile("script.lua");
+  ```
+</ParamField>
+
+## Coroutine Methods
+
+<ParamField path="CreateCoroutine" type="method">
+  Creates a coroutine pointing at the specified function.
+  
+  <Expandable title="parameters">
+    <ParamField path="function" type="LuaValue" required>
+      The function to wrap in a coroutine
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="LuaValue">
+    The coroutine handle
+  </ResponseField>
+  
+  ```csharp
+  LuaValue func = script.LoadString("return coroutine.yield(1)");
+  LuaValue co = script.CreateCoroutine(func);
+  ```
+</ParamField>
+
+## Type Metatable Methods
+
+<ParamField path="GetTypeMetatable" type="method">
+  Gets the metatable for a specific Lua type.
+  
+  <Expandable title="parameters">
+    <ParamField path="type" type="DataType" required>
+      The data type
+    </ParamField>
+  </Expandable>
+  
+  <ResponseField name="returns" type="Table">
+    The metatable for the type, or null
+  </ResponseField>
+</ParamField>
+
+<ParamField path="SetTypeMetatable" type="method">
+  Sets the metatable for a specific Lua type.
+  
+  <Expandable title="parameters">
+    <ParamField path="type" type="DataType" required>
+      The type (must be Nil, Boolean, Number, String, or Function)
+    </ParamField>
+    <ParamField path="metatable" type="Table" required>
+      The metatable to set
+    </ParamField>
+  </Expandable>
+  
+  ```csharp
+  var mt = new Table(script);
+  mt["__add"] = (Func<string, string, string>)((a, b) => a + b);
+  script.SetTypeMetatable(DataType.String, mt);
+  ```
+</ParamField>
+
+## Constants
+
+<ResponseField name="VERSION" type="string" static>
+  The version of the SolarSharp engine ("2.0.0.0")
+</ResponseField>
+
+<ResponseField name="LUA_VERSION" type="string" static>
+  The Lua version being supported ("5.2")
+</ResponseField>
+
+## Example Usage
+
+```csharp
+using SolarSharp.Interpreter;
+
+// Create a script instance
+var script = new Script();
+
+// Execute Lua code
+script.DoString(@"
+    function greet(name)
+        return 'Hello, ' .. name .. '!'
+    end
+");
+
+// Call a Lua function from C#
+LuaValue greetFunc = script.Globals.Get("greet");
+LuaValue result = script.Call(greetFunc, "World");
+Console.WriteLine(result.String); // "Hello, World!"
+
+// Access global variables
+script.Globals["myNumber"] = 42;
+LuaValue value = script.DoString("return myNumber * 2");
+Console.WriteLine(value.Number); // 84
+```

@@ -1,0 +1,406 @@
+---
+title: Migrating from MoonSharp
+description: Comprehensive guide to migrating your codebase from MoonSharp to SolarSharp
+---
+
+SolarSharp is a modernized version of MoonSharp, built on .NET Standard 2.1 with performance improvements and bug fixes. This guide will help you migrate your existing MoonSharp code to SolarSharp.
+
+## Overview
+
+SolarSharp maintains high API compatibility with MoonSharp while providing:
+
+- Performance improvements across the interpreter and parser
+- Modern C# features from .NET Standard 2.1
+- Bug fixes and improved stability
+- Continued maintenance and updates
+
+## Key Differences from MoonSharp
+
+### Namespace Changes
+
+The primary namespace change:
+
+```csharp
+// MoonSharp
+using MoonSharp.Interpreter;
+using MoonSharp.Interpreter.DataTypes;
+
+// SolarSharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+```
+
+### Target Framework
+
+SolarSharp requires .NET Standard 2.1 or higher:
+
+- **MoonSharp**: .NET Standard 2.0, .NET Framework 4.x
+- **SolarSharp**: .NET Standard 2.1+, .NET 5+, .NET Framework 4.7.2+
+
+## Migration Steps
+
+### Step 1: Update Dependencies
+
+Remove MoonSharp and add SolarSharp:
+
+```bash
+# Using NuGet Package Manager
+Uninstall-Package MoonSharp
+Install-Package SolarSharp.Interpreter
+
+# Using .NET CLI
+dotnet remove package MoonSharp
+dotnet add package SolarSharp.Interpreter
+```
+
+### Step 2: Update Using Directives
+
+Replace all MoonSharp namespace references:
+
+```csharp
+// Before (MoonSharp)
+using MoonSharp.Interpreter;
+using MoonSharp.Interpreter.DataTypes;
+using MoonSharp.Interpreter.Loaders;
+using MoonSharp.Interpreter.Errors;
+using MoonSharp.Interpreter.Interop;
+
+// After (SolarSharp)
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.DataTypes;
+using SolarSharp.Interpreter.Loaders;
+using SolarSharp.Interpreter.Errors;
+using SolarSharp.Interpreter.Interop;
+```
+
+### Step 3: Update Assembly References
+
+If you have assembly attributes or references:
+
+```csharp
+// Before
+[assembly: MoonSharpUserData]
+
+// After
+[assembly: SolarSharpUserData]
+```
+
+### Step 4: Test Core Functionality
+
+The core API remains the same:
+
+```csharp
+// This code works in both MoonSharp and SolarSharp
+Script script = new Script();
+
+script.DoString(@"
+    function add(a, b)
+        return a + b
+    end
+");
+
+LuaValue result = script.Call(script.Globals["add"], 5, 3);
+Console.WriteLine(result.Number); // Output: 8
+```
+
+## API Compatibility
+
+### Core Classes
+
+These classes work identically in SolarSharp:
+
+- `Script` - Main scripting class
+- `LuaValue` - Lua value wrapper
+- `Table` - Lua table implementation
+- `Closure` - Lua function/closure
+- `UserData` - CLR object wrapper
+
+### Example: Basic Script Execution
+
+```csharp
+// Compatible with both MoonSharp and SolarSharp
+public class ScriptRunner
+{
+    private Script _script;
+    
+    public void Initialize()
+    {
+        _script = new Script();
+        
+        // Register .NET type
+        UserData.RegisterType<MyCustomClass>();
+        
+        // Expose .NET object to Lua
+        _script.Globals["myObject"] = new MyCustomClass();
+    }
+    
+    public LuaValue Execute(string luaCode)
+    {
+        return _script.DoString(luaCode);
+    }
+}
+```
+
+### UserData Registration
+
+UserData registration is identical:
+
+```csharp
+// Both MoonSharp and SolarSharp
+[MoonSharpUserData] // Attribute name stays the same for compatibility
+public class Player
+{
+    public string Name { get; set; }
+    public int Health { get; set; }
+    
+    public void TakeDamage(int amount)
+    {
+        Health -= amount;
+    }
+}
+
+// Registration
+UserData.RegisterType<Player>();
+```
+
+### Coroutines
+
+Coroutine handling remains unchanged:
+
+```csharp
+// Compatible with both
+script.DoString(@"
+    function counter()
+        for i = 1, 10 do
+            coroutine.yield(i)
+        end
+    end
+    
+    co = coroutine.create(counter)
+");
+
+LuaValue co = script.Globals["co"];
+
+while (co.Coroutine.State == CoroutineState.Suspended)
+{
+    LuaValue result = co.Coroutine.Resume();
+    Console.WriteLine(result.Number);
+}
+```
+
+## Performance Improvements
+
+SolarSharp includes several performance enhancements:
+
+### Parser Performance
+
+- Faster Lua code parsing
+- Reduced memory allocations during parsing
+- Improved bytecode generation
+
+### Interpreter Performance
+
+- Optimized instruction execution
+- Better memory management
+- Faster table operations
+
+### Benchmarking Your Migration
+
+To verify performance improvements:
+
+```csharp
+using System.Diagnostics;
+using SolarSharp.Interpreter;
+
+public class BenchmarkHelper
+{
+    public static void MeasureExecution(string luaCode, int iterations)
+    {
+        Script script = new Script();
+        
+        Stopwatch sw = Stopwatch.StartNew();
+        for (int i = 0; i < iterations; i++)
+        {
+            script.DoString(luaCode);
+        }
+        sw.Stop();
+        
+        Console.WriteLine($"Total: {sw.ElapsedMilliseconds}ms");
+        Console.WriteLine($"Average: {sw.ElapsedMilliseconds / (double)iterations}ms");
+    }
+}
+```
+
+## Bug Fixes and Improvements
+
+SolarSharp includes fixes for various MoonSharp issues:
+
+- Improved error messages and stack traces
+- Better handling of edge cases in string operations
+- Fixed memory leaks in certain scenarios
+- Enhanced IL2CPP compatibility
+
+## Breaking Changes
+
+### Minimal Breaking Changes
+
+SolarSharp maintains high compatibility, but there are a few considerations:
+
+1. **.NET Standard 2.1 Requirement**
+   - Requires .NET Framework 4.7.2+ or .NET Core 3.0+
+   - Unity 2021.2 or higher
+
+2. **Performance Statistics**
+   - Some internal performance counters may have different names
+
+3. **Deprecated APIs**
+   - Very few APIs were removed; most deprecated APIs still work with warnings
+
+## Unity-Specific Migration
+
+### Unity Version Requirements
+
+```csharp
+// MoonSharp: Unity 2018.x+
+// SolarSharp: Unity 2021.2+ (for .NET Standard 2.1)
+
+// If using older Unity versions, you may need to upgrade
+// Player Settings > API Compatibility Level > .NET Standard 2.1
+```
+
+### Script Loader
+
+```csharp
+// Both use the same loader API
+script.Options.ScriptLoader = new UnityAssetsScriptLoader();
+```
+
+## Testing Your Migration
+
+### Create a Migration Test Suite
+
+```csharp
+using NUnit.Framework;
+using SolarSharp.Interpreter;
+
+[TestFixture]
+public class MigrationTests
+{
+    [Test]
+    public void TestBasicExecution()
+    {
+        Script script = new Script();
+        LuaValue result = script.DoString("return 2 + 2");
+        Assert.AreEqual(4, result.Number);
+    }
+    
+    [Test]
+    public void TestUserDataInterop()
+    {
+        Script script = new Script();
+        UserData.RegisterType<TestClass>();
+        
+        script.Globals["obj"] = new TestClass { Value = 42 };
+        LuaValue result = script.DoString("return obj.Value");
+        
+        Assert.AreEqual(42, result.Number);
+    }
+    
+    [Test]
+    public void TestTableOperations()
+    {
+        Script script = new Script();
+        script.DoString(@"
+            t = { a = 1, b = 2, c = 3 }
+        ");
+        
+        Table t = script.Globals["t"] as Table;
+        Assert.AreEqual(1, t["a"]);
+        Assert.AreEqual(2, t["b"]);
+        Assert.AreEqual(3, t["c"]);
+    }
+}
+
+public class TestClass
+{
+    public int Value { get; set; }
+}
+```
+
+## Common Migration Issues
+
+### Issue 1: Namespace Not Found
+
+**Problem:**
+```csharp
+// Error: The type or namespace name 'MoonSharp' could not be found
+using MoonSharp.Interpreter;
+```
+
+**Solution:**
+```csharp
+using SolarSharp.Interpreter;
+```
+
+### Issue 2: Target Framework Errors
+
+**Problem:**
+```
+Error: Package 'SolarSharp' requires .NET Standard 2.1
+```
+
+**Solution:**
+Update your project file:
+```xml
+<PropertyGroup>
+  <TargetFramework>netstandard2.1</TargetFramework>
+  <!-- or -->
+  <TargetFramework>net5.0</TargetFramework>
+</PropertyGroup>
+```
+
+### Issue 3: Unity Version Compatibility
+
+**Problem:**
+```
+Unity 2019.x doesn't support .NET Standard 2.1
+```
+
+**Solution:**
+Upgrade to Unity 2021.2 or higher, or use a compatibility layer.
+
+## Gradual Migration Strategy
+
+For large codebases, consider a gradual migration:
+
+### Phase 1: Update Infrastructure
+1. Update build configurations
+2. Update package references
+3. Update using directives
+
+### Phase 2: Test Core Functionality
+1. Run existing test suites
+2. Verify critical paths
+3. Test integration points
+
+### Phase 3: Performance Validation
+1. Run performance benchmarks
+2. Profile memory usage
+3. Validate improvements
+
+### Phase 4: Full Deployment
+1. Deploy to staging environment
+2. Monitor for issues
+3. Gradual rollout to production
+
+## Support and Resources
+
+- **Performance Comparisons**: https://braedonwooding.github.io/solarsharp/dev/bench/
+- **Source Code**: https://github.com/BraedonWooding/solarsharp
+- **Issue Tracker**: Report migration issues on GitHub
+
+## Next Steps
+
+- Review [Error Handling](/guides/error-handling) for improved error management
+- Check out [Unity Integration](/guides/unity-integration) for Unity-specific features
+- Explore [API Reference](/api/script) for detailed documentation

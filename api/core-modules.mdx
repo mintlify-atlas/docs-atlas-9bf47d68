@@ -1,0 +1,410 @@
+---
+title: 'CoreModules'
+description: 'Enumeration of standard Lua library modules'
+---
+
+The `CoreModules` enum is a flags enumeration that specifies which standard Lua libraries should be loaded when creating a `Script` instance.
+
+## Usage
+
+Pass a `CoreModules` value to the Script constructor:
+
+```csharp
+// Use the default preset
+var script = new Script();
+
+// Use a specific preset
+var sandboxed = new Script(CoreModules.Preset_HardSandbox);
+
+// Combine specific modules
+var custom = new Script(
+    CoreModules.Basic | 
+    CoreModules.String | 
+    CoreModules.Table
+);
+```
+
+## Module Flags
+
+<ResponseField name="None" type="enum" value="0x0">
+  No modules loaded. Creates a completely empty environment.
+  
+  ```csharp
+  var script = new Script(CoreModules.None);
+  // No global functions or tables available
+  ```
+</ResponseField>
+
+<ResponseField name="GlobalConsts" type="enum" value="0x1">
+  Global constants: `_G`, `_VERSION`, and `_SOLARSHARP`.
+  
+  ```lua
+  print(_VERSION)      -- Lua version
+  print(_SOLARSHARP)   -- SolarSharp info
+  print(_G == _G)      -- true, self-reference
+  ```
+</ResponseField>
+
+<ResponseField name="TableIterators" type="enum" value="0x2">
+  Table iterators: `next`, `ipairs`, and `pairs`.
+  
+  ```lua
+  for k, v in pairs(myTable) do
+      print(k, v)
+  end
+  ```
+</ResponseField>
+
+<ResponseField name="Metatables" type="enum" value="0x4">
+  Metatable methods: `setmetatable`, `getmetatable`, `rawset`, `rawget`, `rawequal`, and `rawlen`.
+  
+  ```lua
+  local mt = { __index = function() return 42 end }
+  setmetatable({}, mt)
+  ```
+</ResponseField>
+
+<ResponseField name="String" type="enum" value="0x8">
+  The `string` package with all string manipulation functions.
+  
+  ```lua
+  print(string.upper("hello"))  -- HELLO
+  print(string.sub("hello", 1, 2))  -- he
+  ```
+</ResponseField>
+
+<ResponseField name="LoadMethods" type="enum" value="0x10">
+  Load methods: `load`, `loadsafe`, `loadfile`, `loadfilesafe`, `dofile`, and `require`.
+  
+  **Warning**: Allows dynamic code execution and file system access.
+  
+  ```lua
+  require("mymodule")
+  dofile("script.lua")
+  ```
+</ResponseField>
+
+<ResponseField name="Table" type="enum" value="0x20">
+  The `table` package for table manipulation.
+  
+  ```lua
+  table.insert(myArray, "value")
+  table.sort(myArray)
+  ```
+</ResponseField>
+
+<ResponseField name="Basic" type="enum" value="0x40">
+  Basic methods: `assert`, `collectgarbage`, `error`, `print`, `select`, `type`, `tonumber`, and `tostring`.
+  
+  ```lua
+  print(type(42))           -- number
+  assert(x > 0, "x must be positive")
+  ```
+</ResponseField>
+
+<ResponseField name="ErrorHandling" type="enum" value="0x80">
+  Error handling methods: `pcall` and `xpcall`.
+  
+  ```lua
+  local ok, result = pcall(function()
+      return riskyOperation()
+  end)
+  ```
+</ResponseField>
+
+<ResponseField name="Math" type="enum" value="0x100">
+  The `math` package with all math functions.
+  
+  ```lua
+  print(math.sqrt(16))      -- 4
+  print(math.sin(math.pi))  -- 0
+  ```
+</ResponseField>
+
+<ResponseField name="Coroutine" type="enum" value="0x200">
+  The `coroutine` package for coroutine management.
+  
+  ```lua
+  local co = coroutine.create(function()
+      coroutine.yield(42)
+  end)
+  ```
+</ResponseField>
+
+<ResponseField name="Bit32" type="enum" value="0x400">
+  The `bit32` package for bitwise operations.
+  
+  ```lua
+  print(bit32.band(0xFF, 0x0F))  -- 15
+  print(bit32.lshift(1, 3))      -- 8
+  ```
+</ResponseField>
+
+<ResponseField name="OS_Time" type="enum" value="0x800">
+  Time methods of the `os` package: `clock`, `difftime`, `date`, and `time`.
+  
+  Safe for sandboxed environments.
+  
+  ```lua
+  print(os.time())          -- Current timestamp
+  print(os.date("%Y-%m-%d"))  -- 2024-03-15
+  ```
+</ResponseField>
+
+<ResponseField name="OS_System" type="enum" value="0x1000">
+  System methods of the `os` package (excluding time methods).
+  
+  **Warning**: Not supported under Unity. Provides system-level access.
+  
+  ```lua
+  os.execute("ls -la")  -- Execute shell command
+  os.exit(0)
+  ```
+</ResponseField>
+
+<ResponseField name="IO" type="enum" value="0x2000">
+  The `io` and `file` packages for file I/O.
+  
+  **Warning**: Not supported under Unity. Provides file system access.
+  
+  ```lua
+  local file = io.open("data.txt", "r")
+  local content = file:read("*a")
+  file:close()
+  ```
+</ResponseField>
+
+<ResponseField name="Debug" type="enum" value="0x4000">
+  The `debug` package (limited support).
+  
+  ```lua
+  debug.traceback()
+  debug.getinfo(func)
+  ```
+</ResponseField>
+
+<ResponseField name="Json" type="enum" value="0x10000">
+  The `json` package (introduced by SolarSharp).
+  
+  ```lua
+  local data = json.parse('{"name": "John", "age": 30}')
+  print(data.name)  -- John
+  
+  local str = json.serialize({x = 10, y = 20})
+  ```
+</ResponseField>
+
+## Presets
+
+<ResponseField name="Preset_HardSandbox" type="enum">
+  A strict sandbox preset for untrusted code.
+  
+  Includes: `GlobalConsts`, `TableIterators`, `String`, `Table`, `Basic`, `Math`, `Bit32`
+  
+  **Use for**: Running untrusted user scripts with minimal system access.
+  
+  ```csharp
+  var sandbox = new Script(CoreModules.Preset_HardSandbox);
+  // Safe to run user-submitted code
+  ```
+</ResponseField>
+
+<ResponseField name="Preset_SoftSandbox" type="enum">
+  A softer sandbox with more features.
+  
+  Includes: `Preset_HardSandbox` + `Metatables`, `ErrorHandling`, `Coroutine`, `OS_Time`, `Json`
+  
+  **Use for**: Semi-trusted environments where you want Lua features but not file system access.
+  
+  ```csharp
+  var script = new Script(CoreModules.Preset_SoftSandbox);
+  // Can use metatables, coroutines, but no file access
+  ```
+</ResponseField>
+
+<ResponseField name="Preset_Default" type="enum">
+  The default preset with nearly everything except debug.
+  
+  Includes: `Preset_SoftSandbox` + `LoadMethods`, `OS_System`, `IO`
+  
+  **Warning**: Allows unlimited system access. Only use with trusted code.
+  
+  ```csharp
+  var script = new Script(); // Uses Preset_Default
+  var script2 = new Script(CoreModules.Preset_Default); // Explicit
+  ```
+</ResponseField>
+
+<ResponseField name="Preset_Complete" type="enum">
+  Everything including debug.
+  
+  Includes: `Preset_Default` + `Debug`
+  
+  **Warning**: Full access to everything. Only for development/debugging.
+  
+  ```csharp
+  var devScript = new Script(CoreModules.Preset_Complete);
+  ```
+</ResponseField>
+
+## Examples
+
+### Minimal Environment
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Modules;
+
+// Only basic functions, no libraries
+var minimal = new Script(
+    CoreModules.Basic | 
+    CoreModules.GlobalConsts
+);
+
+minimal.DoString(@"
+    print('Hello')        -- Works
+    print(type(42))       -- Works
+    -- string.upper('x') -- Would fail, no string library
+");
+```
+
+### Custom Combination
+
+```csharp
+// Math and string manipulation only
+var mathScript = new Script(
+    CoreModules.Basic |
+    CoreModules.Math |
+    CoreModules.String |
+    CoreModules.TableIterators
+);
+
+mathScript.DoString(@"
+    local x = math.sqrt(16)
+    local s = string.upper('hello')
+    print(x, s)  -- 4, HELLO
+");
+```
+
+### Secure Sandbox
+
+```csharp
+// For running untrusted user scripts
+var userScript = new Script(CoreModules.Preset_HardSandbox);
+
+// Safely execute user code
+userScript.DoString(userCode);
+
+// File I/O not available
+try
+{
+    userScript.DoString("io.open('secret.txt', 'r')");
+}
+catch
+{
+    Console.WriteLine("File I/O blocked");
+}
+```
+
+### Game Modding Environment
+
+```csharp
+// Good balance for game mods
+var modScript = new Script(
+    CoreModules.Preset_SoftSandbox
+);
+
+// Add custom APIs
+modScript.Globals["game"] = gameAPI;
+modScript.Globals["player"] = playerAPI;
+
+modScript.DoString(@"
+    -- Mods can use coroutines, metatables, etc.
+    function onPlayerJoin()
+        local co = coroutine.create(function()
+            game:showMessage('Welcome!')
+            coroutine.yield()
+            game:giveStarterItems(player)
+        end)
+        coroutine.resume(co)
+    end
+");
+```
+
+### Development Environment
+
+```csharp
+// Full features for development/debugging
+var devScript = new Script(CoreModules.Preset_Complete);
+
+devScript.DoString(@"
+    -- All libraries available
+    local json = require('json')
+    local data = json.parse('{}')
+    
+    -- Debug info available
+    print(debug.traceback())
+    
+    -- File I/O available
+    local file = io.open('log.txt', 'w')
+    file:write('Debug info')
+    file:close()
+");
+```
+
+### Testing Individual Modules
+
+```csharp
+// Test if specific module is loaded
+var script = new Script(CoreModules.String | CoreModules.Math);
+
+script.DoString(@"
+    assert(string, 'string module loaded')
+    assert(math, 'math module loaded')
+    assert(not io, 'io module not loaded')
+    assert(not table, 'table module not loaded')
+");
+```
+
+## Security Considerations
+
+### Safe Modules (Sandbox-Friendly)
+- `Basic` (except `dofile`/`load` which are in LoadMethods)
+- `String`
+- `Table`
+- `Math`
+- `Bit32`
+- `GlobalConsts`
+- `TableIterators`
+- `Metatables`
+- `ErrorHandling`
+- `Coroutine`
+- `OS_Time`
+- `Json`
+
+### Unsafe Modules (System Access)
+- `LoadMethods` - Dynamic code execution, file loading
+- `OS_System` - Shell command execution, process control
+- `IO` - File system access
+- `Debug` - Can inspect/modify program state
+
+## Checking Loaded Modules
+
+```csharp
+using SolarSharp.Interpreter;
+using SolarSharp.Interpreter.Modules;
+
+var modules = CoreModules.String | CoreModules.Math;
+
+// Check if a module is included
+if ((modules & CoreModules.String) == CoreModules.String)
+{
+    Console.WriteLine("String module included");
+}
+
+// Extension method (if available)
+if (modules.Has(CoreModules.Math))
+{
+    Console.WriteLine("Math module included");
+}
+```
